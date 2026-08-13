@@ -35,6 +35,17 @@ class Settings(BaseSettings):
     # Storage
     data_dir: str = "./data"
 
+    # Logging
+    log_level: str = "INFO"
+    log_format: str = "text"  # "text" | "json"
+    log_console_enabled: bool = True
+    log_file_enabled: bool = True
+    log_file_path: str = "./data/logs/app.log"
+    log_file_max_bytes: int = 10 * 1024 * 1024  # 10MB
+    log_file_backup_count: int = 5
+    # 是否用彩色控制台输出（生产环境建议关闭）
+    log_colors: bool = True
+
 
 @lru_cache
 def get_settings() -> Settings:

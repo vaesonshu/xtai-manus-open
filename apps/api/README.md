@@ -83,3 +83,20 @@ uv run uvicorn main:app --reload
 - **应用层** 提供 `StartAgentRun` 用例，负责校验、装配、调用端口，不泄露框架细节。
 - **基础设施层** 的 `LangGraphAgent` 用 StateGraph 实现 agent 循环（`planner → executor → reflection`），并用 SQLite checkpointer 做状态持久化与断点续跑。
 - 后续扩展（多 agent、工具调用、记忆系统）都在不破坏领域层的前提下，通过替换/新增基础设施适配器完成。
+
+## 日志系统
+
+日志在应用启动时由 `infrastructure/logging_.py` 的 `setup_logging()` 统一装配，通过 `.env` 中的 `LOG_*` 配置项控制：
+
+| 配置项 | 默认值 | 说明 |
+| --- | --- | --- |
+| `LOG_LEVEL` | `INFO` | 日志等级（`DEBUG`/`INFO`/`WARNING`/`ERROR`/`CRITICAL`） |
+| `LOG_FORMAT` | `text` | 输出格式：`text`（人类可读）/ `json`（结构化） |
+| `LOG_CONSOLE_ENABLED` | `true` | 是否输出到控制台 |
+| `LOG_FILE_ENABLED` | `true` | 是否输出到文件 |
+| `LOG_FILE_PATH` | `./data/logs/app.log` | 日志文件路径 |
+| `LOG_FILE_MAX_BYTES` | `10485760` | 单文件最大字节数（滚动切割） |
+| `LOG_FILE_BACKUP_COUNT` | `5` | 保留的历史日志文件数 |
+| `LOG_COLORS` | `true` | 控制台是否彩色输出 |
+
+使用方式：各模块通过 `logging.getLogger(__name__)` 获取 logger，无需手动配置。JSON 格式额外支持在 `extra` 中携带 `request_id`、`run_id` 等结构化字段，便于日志采集与检索。
