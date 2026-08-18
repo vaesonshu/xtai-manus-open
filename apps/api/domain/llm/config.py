@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field, replace
 
 from domain.exceptions import ValidationError
+from domain.llm.constants import SUPPORTED_LLM_PROVIDERS
 from domain.llm.events import LlmConfigUpdated
 from domain.primitives import IntegrationEvent
 
@@ -32,6 +33,11 @@ class LlmConfig:
         """校验配置不变量。"""
         if not self.provider.strip():
             raise ValidationError("provider must not be empty")
+        if self.provider.lower() not in SUPPORTED_LLM_PROVIDERS:
+            supported = ", ".join(sorted(SUPPORTED_LLM_PROVIDERS))
+            raise ValidationError(
+                f"unsupported provider: {self.provider} (supported: {supported})"
+            )
         if not self.model.strip():
             raise ValidationError("model must not be empty")
         if not self.api_key.strip():

@@ -39,3 +39,10 @@ class ConflictError(DomainError):
 
     code = "conflict"
     status_code = 409
+
+
+class LlmInvokeError(DomainError):
+    """LLM 远程调用失败。"""
+
+    code = "llm_invoke_error"
+    status_code = 502

@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Protocol
 
 from domain.llm.config import LlmConfig
+from domain.llm.provider import LlmProviderPort
 
 
 class LlmConfigRepository(Protocol):
@@ -20,15 +21,16 @@ class LlmConfigRepository(Protocol):
 
 
 class LlmRuntimePort(Protocol):
-    """LLM 运行时端口：支持配置热更新与后台调用基础设施。
-
-    具体 LangChain 客户端创建由基础设施层实现，领域层只关心配置生命周期。
-    """
+    """LLM 运行时端口：支持配置热更新、提供商切换与后台调用。"""
 
     def current_config(self) -> LlmConfig:
         """返回当前生效配置。"""
         ...
 
     def reload(self, config: LlmConfig) -> None:
-        """热加载新配置（使后续调用使用最新参数）。"""
+        """热加载新配置（重建底层提供商实例）。"""
+        ...
+
+    def get_provider(self) -> LlmProviderPort:
+        """获取当前配置对应的 LLM 提供商实例。"""
         ...

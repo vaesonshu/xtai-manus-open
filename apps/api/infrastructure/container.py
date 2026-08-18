@@ -9,6 +9,7 @@ from __future__ import annotations
 import logging
 
 from application.agent.service import AgentApplicationService
+from application.llm.invoke_service import LlmInvokeApplicationService
 from application.llm.service import LlmConfigApplicationService
 from domain.ports import (
     AgentRunRepository,
@@ -70,6 +71,7 @@ class Container:
             event_bus=self.event_bus,
             default_config_factory=lambda: llm_config_from_settings(settings),
         )
+        self.llm_invoke_service = LlmInvokeApplicationService(runtime=self.llm_runtime)
 
     def cache_health(self) -> str:
         """返回 Redis 健康状态：ok / disabled / error。"""
