@@ -39,7 +39,7 @@ from infrastructure.persistence.llm_config_repository import PostgresLlmConfigRe
 from infrastructure.persistence.in_memory_task_repository import InMemoryTaskRepository
 from infrastructure.persistence.postgres_repository import PostgresAgentRunRepository
 from infrastructure.persistence.repository import InMemoryAgentRunRepository
-from infrastructure.tools import MockToolKit, ToolRegistry
+from infrastructure.tools import ToolRegistry, build_mock_toolkit
 
 logger = logging.getLogger(__name__)
 
@@ -93,7 +93,7 @@ class Container:
         self.task_repository = InMemoryTaskRepository()
         self.task_service = TaskApplicationService(self.task_repository)
 
-        tool_registry = ToolRegistry([MockToolKit()])
+        tool_registry = ToolRegistry([build_mock_toolkit()])
         react_executor = ReActExecutor(
             llm_runtime=self.llm_runtime,
             memory_service=self.memory_service,

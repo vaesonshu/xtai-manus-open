@@ -1,6 +1,17 @@
 """工具基础设施导出。"""
 
-from infrastructure.tools.mock_tool import MockToolKit
+from infrastructure.tools.langchain_toolkit import LangChainToolKit
+from infrastructure.tools.mock_tool import build_mock_toolkit
+from infrastructure.tools.parameters import filter_tool_arguments
 from infrastructure.tools.registry import ToolRegistry
 
-__all__ = ["MockToolKit", "ToolRegistry"]
+# 兼容既有引用
+MockToolKit = build_mock_toolkit
+
+__all__ = [
+    "LangChainToolKit",
+    "MockToolKit",
+    "ToolRegistry",
+    "build_mock_toolkit",
+    "filter_tool_arguments",
+]

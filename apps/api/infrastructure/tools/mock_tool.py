@@ -1,43 +1,19 @@
-"""Mock 工具集：用于验证 ReAct 循环与事件流。"""
+"""Mock 工具集：基于 LangChain ``@tool`` 的测试用工具。"""
 
 from __future__ import annotations
 
-from typing import Any
+from langchain_core.tools import tool
 
-from domain.tool.result import ToolResult
+from infrastructure.tools.langchain_toolkit import LangChainToolKit
 
 
-class MockToolKit:
-    """提供 ``echo`` 工具，将输入文本原样返回。"""
+@tool
+def echo(text: str) -> str:
+    """回显输入文本，用于测试工具调用链路。"""
+    normalized = text.strip()
+    return normalized or "(empty)"
 
-    name = "mock"
 
-    def get_schemas(self) -> list[dict[str, Any]]:
-        return [
-            {
-                "type": "function",
-                "function": {
-                    "name": "echo",
-                    "description": "回显输入文本，用于测试工具调用链路",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "text": {
-                                "type": "string",
-                                "description": "需要回显的文本",
-                            }
-                        },
-                        "required": ["text"],
-                    },
-                },
-            }
-        ]
-
-    def has_tool(self, function_name: str) -> bool:
-        return function_name == "echo"
-
-    async def invoke(self, function_name: str, arguments: dict[str, Any]) -> ToolResult:
-        if function_name != "echo":
-            return ToolResult(success=False, message=f"未知工具: {function_name}")
-        text = str(arguments.get("text", "")).strip()
-        return ToolResult(success=True, message=text or "(empty)", data={"text": text})
+def build_mock_toolkit() -> LangChainToolKit:
+    """构建 mock 工具集（供容器与测试使用）。"""
+    return LangChainToolKit(name="mock", tools=[echo])
