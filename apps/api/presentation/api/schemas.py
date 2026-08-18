@@ -29,6 +29,8 @@ class HealthResponse(BaseModel):
     status: str
     service: str
     env: str
+    redis: str = "disabled"
+    database: str = "disabled"
 
 
 class ErrorDetail(BaseModel):

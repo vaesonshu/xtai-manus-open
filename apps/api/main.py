@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import logging
+from contextlib import asynccontextmanager
+from typing import AsyncIterator
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -10,9 +12,20 @@ from fastapi.middleware.cors import CORSMiddleware
 from infrastructure import get_settings
 from infrastructure.logging_ import setup_logging
 from presentation.api.routes import api_router
+from presentation.deps import get_container
 from presentation.exception_handlers import register_exception_handlers
 
 logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    """应用生命周期：启动日志与资源释放。"""
+    settings = get_settings()
+    logger.info("服务启动完成 (env=%s, level=%s)", settings.app_env, settings.log_level)
+    yield
+    get_container().close()
+    logger.info("服务已关闭，外部资源已释放")
 
 
 def create_app() -> FastAPI:
@@ -26,6 +39,7 @@ def create_app() -> FastAPI:
         title=settings.app_name,
         debug=settings.debug,
         version="0.0.1",
+        lifespan=lifespan,
     )
 
     # 跨域中间件需在路由注册前挂载，以便预检 OPTIONS 请求也能被正确处理
@@ -40,10 +54,6 @@ def create_app() -> FastAPI:
     register_exception_handlers(app, debug=settings.debug)
 
     app.include_router(api_router)
-
-    @app.on_event("startup")
-    async def on_startup() -> None:  # pragma: no cover - 启动钩子
-        logger.info("服务启动完成 (env=%s, level=%s)", settings.app_env, settings.log_level)
 
     return app
 

@@ -57,6 +57,17 @@ class Settings(BaseSettings):
     # Storage
     data_dir: str = "./data"
 
+    # Redis 缓存
+    redis_enabled: bool = True
+    redis_url: str = "redis://localhost:6379/0"
+    redis_key_prefix: str = "xtai"
+    redis_default_ttl: int = 300
+
+    # PostgreSQL 业务数据库
+    database_enabled: bool = True
+    database_url: str = "postgresql+psycopg://postgres:postgres@localhost:5432/xtai"
+    database_echo: bool = False
+
     # Logging
     log_level: str = "INFO"
     log_format: str = "text"  # "text" | "json"
