@@ -53,6 +53,8 @@ class Settings(BaseSettings):
     # LangGraph
     checkpoint_db_path: str = "./data/checkpoints.db"
     agent_max_iterations: int = 30
+    # 是否调用 LLM 做在线规划（False 时使用离线三步规划）
+    agent_use_llm_planning: bool = True
 
     # Storage
     data_dir: str = "./data"

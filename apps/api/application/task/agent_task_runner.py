@@ -60,6 +60,11 @@ class AgentTaskRunner:
         self._use_llm_planning = use_llm_planning
         self._replan_after_each_step = replan_after_each_step
 
+    def should_keep_execution_alive(self, task_id: TaskId) -> bool:
+        """WAITING 状态下保留执行实例，以便用户回复后继续。"""
+        agent_task = self._tasks.get(task_id)
+        return agent_task is not None and agent_task.status is TaskStatus.WAITING
+
     async def invoke(self, execution: TaskExecutionPort) -> None:
         """驱动一次完整的 Agent 任务执行（支持新建与 WAITING 恢复）。"""
         task_id = TaskId(execution.task_id)

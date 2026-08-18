@@ -1,4 +1,4 @@
-"""基于 Redis Stream 的后台任务执行实例。"""
+"""基于内存队列的后台任务执行实例（无 Redis 时使用）。"""
 
 from __future__ import annotations
 
@@ -7,32 +7,33 @@ import logging
 import uuid
 from typing import ClassVar
 
-from domain.ports.message_queue import MessageQueuePort
 from domain.task.identifiers import TaskId
 from domain.task.ports import TaskExecutionPort, TaskRunnerPort
-from infrastructure.message_queue.redis_stream_message_queue import RedisStreamMessageQueue
+from infrastructure.message_queue.in_memory_message_queue import InMemoryMessageQueue
 
 logger = logging.getLogger(__name__)
 
 
-class RedisStreamTask:
-    """基于 Redis Stream 的 Task 实现。"""
+class InMemoryStreamTask:
+    """内存版 Task 执行实例，语义对齐 ``RedisStreamTask``。"""
 
-    _task_registry: ClassVar[dict[str, RedisStreamTask]] = {}
+    _task_registry: ClassVar[dict[str, InMemoryStreamTask]] = {}
+    _output_archive: ClassVar[dict[str, InMemoryMessageQueue]] = {}
 
     def __init__(self, task_runner: TaskRunnerPort) -> None:
         self._task_runner = task_runner
         self._id = str(uuid.uuid4())
         self._execution_task: asyncio.Task[None] | None = None
 
-        self._input_stream = RedisStreamMessageQueue(f"task:input:{self._id}")
-        self._output_stream = RedisStreamMessageQueue(f"task:output:{self._id}")
+        self._input_stream = InMemoryMessageQueue()
+        self._output_stream = InMemoryMessageQueue()
 
-        RedisStreamTask._task_registry[self._id] = self
+        InMemoryStreamTask._task_registry[self._id] = self
+        InMemoryStreamTask._output_archive[self._id] = self._output_stream
 
     def _cleanup_registry(self) -> None:
-        if self._id in RedisStreamTask._task_registry:
-            del RedisStreamTask._task_registry[self._id]
+        if self._id in InMemoryStreamTask._task_registry:
+            del InMemoryStreamTask._task_registry[self._id]
             logger.info("任务[%s]已从注册中心移除", self._id)
 
     def _on_task_done(self) -> None:
@@ -44,24 +45,19 @@ class RedisStreamTask:
                 return
         self._cleanup_registry()
 
-    @classmethod
-    def output_stream_for(cls, task_id: str) -> RedisStreamMessageQueue:
-        """按任务 ID 打开输出流（任务结束后仍可回放 SSE 事件）。"""
-        return RedisStreamMessageQueue(f"task:output:{task_id}")
-
     async def _execute_task(self) -> None:
         try:
             await self._task_runner.invoke(self)
         except asyncio.CancelledError:
             logger.info("任务[%s]执行被取消", self._id)
             raise
-        except Exception:  # noqa: BLE001 - 记录后由 finally 统一清理
+        except Exception:  # noqa: BLE001
             logger.exception("任务[%s]执行出现异常", self._id)
         finally:
             self._on_task_done()
 
     async def invoke(self) -> None:
-        """在后台启动任务执行（``done`` 为 True 时可启动）。"""
+        """在后台启动任务执行。"""
         if self.done:
             self._execution_task = asyncio.create_task(self._execute_task())
             logger.info("任务[%s]开始执行", self._id)
@@ -72,16 +68,15 @@ class RedisStreamTask:
             logger.info("任务[%s]已取消", self._id)
             self._cleanup_registry()
             return True
-
         self._cleanup_registry()
         return True
 
     @property
-    def input_stream(self) -> MessageQueuePort:
+    def input_stream(self) -> InMemoryMessageQueue:
         return self._input_stream
 
     @property
-    def output_stream(self) -> MessageQueuePort:
+    def output_stream(self) -> InMemoryMessageQueue:
         return self._output_stream
 
     @property
@@ -110,3 +105,17 @@ class RedisStreamTask:
             if task._task_runner:
                 await task._task_runner.destroy()
         cls._task_registry.clear()
+        cls._output_archive.clear()
+
+    @classmethod
+    def output_stream_for(cls, task_id: str) -> InMemoryMessageQueue:
+        """按任务 ID 获取输出流（含已归档实例）。"""
+        task = cls._task_registry.get(task_id)
+        if task is not None:
+            return task.output_stream
+        archived = cls._output_archive.get(task_id)
+        if archived is not None:
+            return archived
+        stream = InMemoryMessageQueue()
+        cls._output_archive[task_id] = stream
+        return stream

@@ -245,3 +245,22 @@ docker exec -it xtai-postgres psql -U postgres -d xtai -c "\dt"
 | `LOG_COLORS` | `true` | 控制台是否彩色输出 |
 
 使用方式：各模块通过 `logging.getLogger(__name__)` 获取 logger，无需手动配置。JSON 格式额外支持在 `extra` 中携带 `request_id`、`run_id` 等结构化字段，便于日志采集与检索。
+
+
+
+
+## 测试
+
+### 1. 启动 API（配置好 OPENAI_API_KEY）
+cd apps/api && uvicorn main:app --reload
+
+### 2. 提交任务
+curl -X POST http://localhost:8000/v1/tasks \
+  -H "Content-Type: application/json" \
+  -d '{"goal": "用 echo 工具回复 hello"}'
+
+### 3. SSE 订阅（替换 {task_id}）
+curl -N http://localhost:8000/v1/tasks/{task_id}/stream
+
+### 4. 查询状态
+curl http://localhost:8000/v1/tasks/{task_id}

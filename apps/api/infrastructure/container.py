@@ -17,6 +17,7 @@ from application.task.agent_task_runner import AgentTaskRunner
 from application.agent.config import AgentExecutionConfig
 from application.agent.react_executor import ReActExecutor
 from application.agent.step_executor import StepExecutor
+from application.task.execution_service import TaskExecutionApplicationService
 from application.task.service import TaskApplicationService
 from domain.ports import (
     AgentRunRepository,
@@ -50,6 +51,7 @@ from infrastructure.tools.file_toolkit import build_file_toolkit
 from infrastructure.tools.interaction_toolkit import build_interaction_toolkit
 from infrastructure.tools.search_toolkit import build_search_toolkit
 from infrastructure.tools.shell_toolkit import build_shell_toolkit
+from infrastructure.task.task_execution_factory import TaskExecutionFactory
 
 logger = logging.getLogger(__name__)
 
@@ -130,6 +132,16 @@ class Container:
             planning_service=self.planning_service,
             task_repository=self.task_repository,
             step_executor=step_executor,
+            use_llm_planning=settings.agent_use_llm_planning,
+            replan_after_each_step=settings.agent_use_llm_planning,
+        )
+        self.task_execution_factory = TaskExecutionFactory(
+            use_redis=settings.redis_enabled,
+        )
+        self.task_execution_service = TaskExecutionApplicationService(
+            task_runner=self.agent_task_runner,
+            task_service=self.task_service,
+            execution_factory=self.task_execution_factory,
         )
 
     def cache_health(self) -> str:
