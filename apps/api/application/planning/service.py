@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-import json
 import logging
-from typing import Any
+
+from pydantic import ValidationError as PydanticValidationError
 
 from application.memory.service import MemoryApplicationService
+from application.planning.dto import LlmPlanOutput
 from application.planning.schema import (
     PLANNER_SYSTEM_PROMPT,
     PLAN_RESPONSE_FORMAT,
@@ -46,14 +47,14 @@ class PlanningApplicationService:
     ) -> TaskPlan:
         """为目标生成多 Agent 规划，并写入 episodic 记忆。"""
         memory_context = self._memory.build_context(task_id)
-        payload = await self._invoke_planner(
+        output = await self._invoke_planner(
             system_prompt=PLANNER_SYSTEM_PROMPT,
             user_prompt=self._build_user_prompt(goal=goal, memory_context=memory_context),
         )
-        plan = self._build_plan_from_payload(
+        plan = self._build_plan_from_output(
             goal=goal,
-            title=title or payload.get("title") or goal,
-            payload=payload,
+            title=title or output.title,
+            output=output,
         )
         self._memory.record(
             task_id,
@@ -74,7 +75,7 @@ class PlanningApplicationService:
             raise ValidationError("task has no attached plan")
 
         memory_context = self._memory.build_context(task.task_id)
-        payload = await self._invoke_planner(
+        output = await self._invoke_planner(
             system_prompt=REPLANNER_SYSTEM_PROMPT,
             user_prompt=self._build_replan_prompt(
                 goal=task.goal,
@@ -83,8 +84,7 @@ class PlanningApplicationService:
                 current_plan=task.plan,
             ),
         )
-        specs = self._parse_step_specs(payload)
-        added = task.replan(specs, reason=reason)
+        added = task.replan(output.to_step_specs(), reason=reason)
         self._memory.record(
             task.task_id,
             kind=MemoryKind.EPISODIC,
@@ -117,7 +117,7 @@ class PlanningApplicationService:
         """不调用 LLM 的确定性规划（测试与降级路径）。"""
         return PlanBuilder.build(title=title, goal=goal, step_specs=step_specs)
 
-    async def _invoke_planner(self, *, system_prompt: str, user_prompt: str) -> dict[str, Any]:
+    async def _invoke_planner(self, *, system_prompt: str, user_prompt: str) -> LlmPlanOutput:
         provider = self._llm_runtime.get_provider()
         message = await provider.invoke(
             messages=[
@@ -130,34 +130,27 @@ class PlanningApplicationService:
         if not content:
             raise ValidationError("planner returned empty content")
         try:
-            return json.loads(content)
-        except json.JSONDecodeError as exc:
-            logger.exception("规划 JSON 解析失败")
-            raise ValidationError("planner returned invalid json") from exc
+            return LlmPlanOutput.model_validate_json(content)
+        except PydanticValidationError as exc:
+            logger.exception("规划输出校验失败")
+            raise ValidationError("planner returned invalid plan output") from exc
 
-    def _build_plan_from_payload(
-        self,
+    @staticmethod
+    def _build_plan_from_output(
         *,
         goal: str,
         title: str,
-        payload: dict[str, Any],
+        output: LlmPlanOutput,
     ) -> TaskPlan:
-        specs = self._parse_step_specs(payload)
+        specs = output.to_step_specs()
         if not specs:
             raise ValidationError("planner returned empty steps")
         return PlanBuilder.build(
             title=title,
             goal=goal,
-            message=str(payload.get("message", "")),
+            message=output.message,
             step_specs=specs,
         )
-
-    @staticmethod
-    def _parse_step_specs(payload: dict[str, Any]) -> list[PlanStepSpec]:
-        raw_steps = payload.get("steps", [])
-        if not isinstance(raw_steps, list):
-            raise ValidationError("planner steps must be a list")
-        return [PlanStepSpec.from_dict(item) for item in raw_steps]
 
     @staticmethod
     def _build_user_prompt(*, goal: str, memory_context: str) -> str:

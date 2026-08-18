@@ -1,45 +1,8 @@
-"""多 Agent 规划 LLM 输出结构。"""
+"""多 Agent 规划 LLM 提示词与响应格式。"""
 
 from __future__ import annotations
 
-PLAN_RESPONSE_FORMAT: dict = {
-    "type": "json_schema",
-    "json_schema": {
-        "name": "multi_agent_plan",
-        "strict": True,
-        "schema": {
-            "type": "object",
-            "properties": {
-                "title": {"type": "string"},
-                "message": {"type": "string"},
-                "steps": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "agent_role": {
-                                "type": "string",
-                                "enum": [
-                                    "coordinator",
-                                    "planner",
-                                    "researcher",
-                                    "coder",
-                                    "reviewer",
-                                    "executor",
-                                ],
-                            },
-                            "description": {"type": "string"},
-                        },
-                        "required": ["agent_role", "description"],
-                        "additionalProperties": False,
-                    },
-                },
-            },
-            "required": ["title", "message", "steps"],
-            "additionalProperties": False,
-        },
-    },
-}
+from application.planning.dto import LlmPlanOutput
 
 PLANNER_SYSTEM_PROMPT = """你是一个多 Agent 任务规划器。
 请将用户目标拆解为 2-5 个可执行步骤，并为每步指定最合适的 agent_role：
@@ -54,3 +17,19 @@ PLANNER_SYSTEM_PROMPT = """你是一个多 Agent 任务规划器。
 REPLANNER_SYSTEM_PROMPT = """你是一个多 Agent 重规划器。
 根据当前目标、历史记忆与重规划原因，生成新的步骤列表（跳过已完成部分）。
 保持步骤具体、可执行，并合理分配 agent_role。"""
+
+
+def build_plan_response_format() -> dict:
+    """由 Pydantic 模型生成 OpenAI ``json_schema`` 响应格式。"""
+    return {
+        "type": "json_schema",
+        "json_schema": {
+            "name": "multi_agent_plan",
+            "strict": True,
+            "schema": LlmPlanOutput.model_json_schema(),
+        },
+    }
+
+
+# 兼容既有引用
+PLAN_RESPONSE_FORMAT: dict = build_plan_response_format()
