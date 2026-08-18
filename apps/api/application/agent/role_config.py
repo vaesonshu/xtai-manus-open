@@ -4,10 +4,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from application.agent.prompts import JSON_RESPONSE_FORMAT, REACT_SYSTEM_PROMPT
+from application.prompts import GLOBAL_SYSTEM_PROMPT, JSON_RESPONSE_FORMAT, REACT_SYSTEM_PROMPT
 from domain.agent.role import AgentRole
 
-_BASE_SYSTEM = REACT_SYSTEM_PROMPT
+# 全局身份 + ReAct 执行规则 + 角色后缀
+_BASE_SYSTEM = f"{GLOBAL_SYSTEM_PROMPT.strip()}\n\n{REACT_SYSTEM_PROMPT.strip()}\n\n"
 
 _INTERACTION_TOOLS = ("message_notify_user", "message_ask_user")
 _RESEARCHER_TOOLS = _INTERACTION_TOOLS + (

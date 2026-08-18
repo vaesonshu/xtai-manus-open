@@ -98,7 +98,7 @@ class ReActExecutor:
         on_event: OnEventCallback | None = None,
     ) -> SummarizeResult:
         """任务完成后汇总历史上下文并生成交付结果。"""
-        from application.agent.prompts import SUMMARIZE_PROMPT
+        from application.prompts.react import SUMMARIZE_PROMPT
 
         role_config = get_role_config(agent_role)
         context = self._memory.build_context(task_id)

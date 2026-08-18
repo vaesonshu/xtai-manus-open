@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 
 @dataclass(frozen=True)
 class StepExecutionResult:
-    """单步 ReAct 执行的结构化输出（对齐参考项目 Step JSON）。"""
+    """单步 ReAct 执行的结构化输出（success / result / attachments）。"""
 
     success: bool
     result: str

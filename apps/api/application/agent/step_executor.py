@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 
-from application.agent.prompts import EXECUTION_PROMPT
+from application.prompts.react import EXECUTION_PROMPT
 from application.agent.react_executor import ReActExecutor
 from application.agent.step_result import StepExecutionResult, SummarizeResult
 from domain.event.base import StreamEvent
@@ -17,7 +17,7 @@ OnEventCallback = Callable[[StreamEvent], Awaitable[None]]
 
 @dataclass(frozen=True)
 class StepExecutionContext:
-    """步骤执行上下文（对齐参考项目 message/attachments/language）。"""
+    """步骤执行上下文，携带 message、attachments、language 等用户侧信息。"""
 
     message: str = ""
     attachments: str = ""

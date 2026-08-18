@@ -8,10 +8,13 @@ from pydantic import ValidationError as PydanticValidationError
 
 from application.memory.service import MemoryApplicationService
 from application.planning.dto import LlmPlanOutput
-from application.planning.schema import (
+from application.planning.schema import PLAN_RESPONSE_FORMAT
+from application.prompts import (
+    CREATE_PLAN_PROMPT,
+    GLOBAL_SYSTEM_PROMPT,
     PLANNER_SYSTEM_PROMPT,
-    PLAN_RESPONSE_FORMAT,
     REPLANNER_SYSTEM_PROMPT,
+    REPLAN_PROMPT,
 )
 from domain.agent.role import AgentRole
 from domain.exceptions import ValidationError
@@ -48,7 +51,7 @@ class PlanningApplicationService:
         """为目标生成多 Agent 规划，并写入 episodic 记忆。"""
         memory_context = self._memory.build_context(task_id)
         output = await self._invoke_planner(
-            system_prompt=PLANNER_SYSTEM_PROMPT,
+            system_prompt=self._planner_system_prompt(PLANNER_SYSTEM_PROMPT),
             user_prompt=self._build_user_prompt(goal=goal, memory_context=memory_context),
         )
         plan = self._build_plan_from_output(
@@ -76,7 +79,7 @@ class PlanningApplicationService:
 
         memory_context = self._memory.build_context(task.task_id)
         output = await self._invoke_planner(
-            system_prompt=REPLANNER_SYSTEM_PROMPT,
+            system_prompt=self._planner_system_prompt(REPLANNER_SYSTEM_PROMPT),
             user_prompt=self._build_replan_prompt(
                 goal=task.goal,
                 reason=reason,
@@ -153,9 +156,17 @@ class PlanningApplicationService:
         )
 
     @staticmethod
+    def _planner_system_prompt(role_prompt: str) -> str:
+        """组合全局身份与规划角色提示词。"""
+        return f"{GLOBAL_SYSTEM_PROMPT.strip()}\n\n{role_prompt.strip()}"
+
+    @staticmethod
     def _build_user_prompt(*, goal: str, memory_context: str) -> str:
-        memory_block = memory_context or "（无历史记忆）"
-        return f"目标：{goal}\n\n相关记忆：\n{memory_block}"
+        return CREATE_PLAN_PROMPT.format(
+            memory_context=memory_context or "（无历史记忆）",
+            message=goal,
+            attachments="（无）",
+        )
 
     @staticmethod
     def _build_replan_prompt(
@@ -175,10 +186,10 @@ class PlanningApplicationService:
             for step in current_plan.steps
             if not step.done
         ]
-        return (
-            f"目标：{goal}\n"
-            f"重规划原因：{reason}\n\n"
-            f"已完成步骤：\n{chr(10).join(completed) or '（无）'}\n\n"
-            f"未完成步骤（将被跳过）：\n{chr(10).join(pending) or '（无）'}\n\n"
-            f"相关记忆：\n{memory_context or '（无）'}"
+        return REPLAN_PROMPT.format(
+            goal=goal,
+            reason=reason,
+            completed_steps="\n".join(completed) or "（无）",
+            pending_steps="\n".join(pending) or "（无）",
+            memory_context=memory_context or "（无）",
         )
