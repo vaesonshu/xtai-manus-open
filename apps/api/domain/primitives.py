@@ -60,3 +60,20 @@ class DomainEvent:
             "run_id": str(self.run_id),
             "occurred_at": self.occurred_at.isoformat(),
         }
+
+
+@dataclass
+class IntegrationEvent:
+    """集成事件基类：描述跨聚合或系统级事实（如配置热更新）。"""
+
+    occurred_at: Timestamp = field(default_factory=Timestamp)
+
+    @property
+    def name(self) -> str:
+        return type(self).__name__
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "name": self.name,
+            "occurred_at": self.occurred_at.isoformat(),
+        }

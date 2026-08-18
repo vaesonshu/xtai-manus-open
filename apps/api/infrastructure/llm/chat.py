@@ -1,24 +1,22 @@
-"""LLM adapter: wraps LangChain ChatOpenAI creation.
-
-Supports any OpenAI-compatible endpoint, just set base_url.
-"""
+"""LLM adapter: 通过可热更新的 LlmRuntime 获取 ChatOpenAI。"""
 
 from __future__ import annotations
 
-from functools import lru_cache
-
 from langchain_openai import ChatOpenAI
 
-from infrastructure.config import get_settings
+from infrastructure.llm.runtime import LlmRuntime
+
+_runtime: LlmRuntime | None = None
 
 
-@lru_cache
+def bind_runtime(runtime: LlmRuntime) -> None:
+    """在应用启动时装配全局运行时（由容器调用）。"""
+    global _runtime
+    _runtime = runtime
+
+
 def get_llm() -> ChatOpenAI:
-    """Create (cached) chat model instance."""
-    settings = get_settings()
-    return ChatOpenAI(
-        model=settings.llm_model,
-        api_key=settings.openai_api_key,
-        base_url=settings.openai_base_url,
-        temperature=settings.llm_temperature,
-    )
+    """获取当前配置下的 ChatOpenAI 实例。"""
+    if _runtime is None:
+        raise RuntimeError("LlmRuntime 尚未初始化，请检查容器装配")
+    return _runtime.get_chat_model()

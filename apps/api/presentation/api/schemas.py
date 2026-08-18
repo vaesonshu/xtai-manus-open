@@ -45,3 +45,30 @@ class ErrorResponse(BaseModel):
     """统一错误响应体。"""
 
     error: ErrorDetail
+
+
+class LlmConfigResponse(BaseModel):
+    """LLM 配置响应（API Key 已脱敏）。"""
+
+    config_id: str
+    provider: str
+    model: str
+    base_url: str
+    temperature: float
+    max_tokens: int | None = None
+    timeout_seconds: float
+    api_key_masked: str
+    has_api_key: bool
+
+
+class UpdateLlmConfigRequest(BaseModel):
+    """更新 LLM 配置请求；未传字段表示保持原值。"""
+
+    provider: str | None = Field(default=None, min_length=1)
+    model: str | None = Field(default=None, min_length=1)
+    api_key: str | None = Field(default=None, min_length=1)
+    base_url: str | None = Field(default=None, min_length=1)
+    temperature: float | None = Field(default=None, ge=0.0, le=2.0)
+    max_tokens: int | None = Field(default=None, gt=0)
+    timeout_seconds: float | None = Field(default=None, gt=0)
+    clear_max_tokens: bool = False

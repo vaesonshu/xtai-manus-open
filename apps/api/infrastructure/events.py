@@ -5,11 +5,12 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 
-from domain.primitives import DomainEvent
+from domain.primitives import DomainEvent, IntegrationEvent
 
 logger = logging.getLogger(__name__)
 
-EventHandler = Callable[[DomainEvent], None]
+BusEvent = DomainEvent | IntegrationEvent
+EventHandler = Callable[[BusEvent], None]
 
 
 class InMemoryEventBus:
@@ -21,7 +22,7 @@ class InMemoryEventBus:
     def subscribe(self, event_type: str, handler: EventHandler) -> None:
         self._handlers.setdefault(event_type, []).append(handler)
 
-    def publish(self, event: DomainEvent) -> None:
+    def publish(self, event: BusEvent) -> None:
         for handler in self._handlers.get(event.name, []):
             try:
                 handler(event)

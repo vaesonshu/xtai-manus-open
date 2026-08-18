@@ -8,7 +8,10 @@ from __future__ import annotations
 from typing import Protocol
 
 from domain.agent.entity import AgentRun
-from domain.primitives import DomainEvent, RunId
+from domain.primitives import DomainEvent, IntegrationEvent, RunId
+
+# 事件总线可发布领域事件与集成事件
+BusEvent = DomainEvent | IntegrationEvent
 
 
 class AgentRunRepository(Protocol):
@@ -26,6 +29,6 @@ class AgentRunRepository(Protocol):
 class EventBus(Protocol):
     """领域事件总线端口。"""
 
-    def publish(self, event: DomainEvent) -> None:
-        """发布一个领域事件。"""
+    def publish(self, event: BusEvent) -> None:
+        """发布一个领域或集成事件。"""
         ...
