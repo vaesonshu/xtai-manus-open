@@ -69,8 +69,11 @@ class StepExecutor:
         on_event: OnEventCallback | None = None,
     ) -> SummarizeResult:
         """任务完成后生成汇总交付。"""
-        del on_event
-        return await self._react.summarize(task_id=task_id, goal=goal)
+        return await self._react.summarize(
+            task_id=task_id,
+            goal=goal,
+            on_event=on_event,
+        )
 
 
 class OfflineStepExecutor:

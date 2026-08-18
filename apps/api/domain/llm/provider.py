@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from typing import Any, Protocol
 
 
@@ -35,4 +36,14 @@ class LlmProviderPort(Protocol):
         tool_choice: str | None = None,
     ) -> dict[str, Any]:
         """调用 LLM 并返回 assistant 消息字典（含 content / tool_calls 等）。"""
+        ...
+
+    async def astream(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
+        response_format: dict[str, Any] | None = None,
+        tool_choice: str | None = None,
+    ) -> AsyncIterator[dict[str, Any]]:
+        """流式调用 LLM；中间块 partial=True，最后一块 partial=False。"""
         ...

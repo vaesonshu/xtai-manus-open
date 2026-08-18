@@ -256,8 +256,6 @@ class AgentTaskRunner:
         self._tasks.save(agent_task)
 
         await self._emit(execution, step_completed(step))
-        if result.display_text:
-            await self._emit(execution, assistant_message(result.display_text))
 
     async def _handle_wait_for_user(
         self,
@@ -344,13 +342,19 @@ class AgentTaskRunner:
         summarize = getattr(self._step_executor, "summarize", None)
         if summarize is None:
             return {}
+
+        async def on_event(event: StreamEvent) -> None:
+            await self._emit(execution, event)
+
         try:
-            summary = await summarize(task_id=task_id, goal=goal)
+            summary = await summarize(
+                task_id=task_id,
+                goal=goal,
+                on_event=on_event,
+            )
         except Exception:  # noqa: BLE001
             logger.exception("任务汇总失败，跳过 summarize")
             return {}
-        if summary.message:
-            await self._emit(execution, assistant_message(summary.message))
         return {
             "summary": summary.message,
             "attachments": list(summary.attachments),

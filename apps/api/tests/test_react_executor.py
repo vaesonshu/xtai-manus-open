@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import AsyncIterator
 from typing import Any
 
 import pytest
@@ -51,6 +52,30 @@ class ScriptedLlmProvider:
         message = self._responses[self._index]
         self._index += 1
         return message
+
+    async def astream(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
+        response_format: dict[str, Any] | None = None,
+        tool_choice: str | None = None,
+    ) -> AsyncIterator[dict[str, Any]]:
+        final = await self.invoke(
+            messages,
+            tools=tools,
+            response_format=response_format,
+            tool_choice=tool_choice,
+        )
+        if final.get("tool_calls"):
+            yield {**final, "partial": False}
+            return
+        content = str(final.get("content") or "")
+        if not content:
+            yield {**final, "partial": False}
+            return
+        for index in range(1, len(content) + 1):
+            yield {"role": "assistant", "content": content[:index], "partial": True}
+        yield {**final, "partial": False}
 
 
 class ScriptedLlmRuntime:
@@ -180,7 +205,8 @@ async def test_react_executor_tool_loop_emits_events() -> None:
     )
 
     assert result.result == "工具已执行，步骤完成。"
-    assert events == ["tool", "tool"]
+    assert events.count("tool") == 2
+    assert "message" in events
 
 
 @pytest.mark.asyncio
@@ -250,3 +276,39 @@ async def test_react_executor_message_ask_user_raises_wait() -> None:
 
     assert exc_info.value.question == "请确认目标？"
     assert exc_info.value.agent_role is AgentRole.RESEARCHER
+
+
+@pytest.mark.asyncio
+async def test_react_executor_streams_partial_messages() -> None:
+    memory_service = MemoryApplicationService(InMemoryMemoryStoreRepository())
+    runtime = ScriptedLlmRuntime(
+        ScriptedLlmProvider([{"role": "assistant", "content": "流式回复内容"}])
+    )
+    executor = _build_executor(
+        runtime,
+        memory_service,
+        ToolRegistry([MockToolKit()]),
+        max_retries=1,
+        retry_interval=0,
+    )
+
+    partial_flags: list[bool] = []
+    messages: list[str] = []
+
+    async def on_event(event) -> None:
+        if event.type != "message":
+            return
+        partial_flags.append(bool(getattr(event, "partial", False)))
+        messages.append(event.message)
+
+    await executor.invoke(
+        task_id=TaskId(),
+        agent_role=AgentRole.RESEARCHER,
+        query="测试流式",
+        on_event=on_event,
+    )
+
+    assert any(partial_flags)
+    assert partial_flags[-1] is False
+    assert messages[-1] == "流式回复内容"
+    assert len(messages) > 1

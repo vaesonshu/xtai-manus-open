@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from application.agent.step_executor import StepExecutionContext
 from domain.agent.role import AgentRole
-from domain.event import assistant_message, step_completed, step_started, user_message
+from domain.event import step_completed, step_started, user_message
 from domain.event.base import StreamEvent
 from domain.exceptions import WaitForUserInputError
 from domain.memory.kind import MemoryKind
@@ -118,8 +118,6 @@ def make_after_step_node(
         deps.task_repository.save(agent_task)
 
         await emitter.emit(step_completed(step))
-        if display_text:
-            await emitter.emit(assistant_message(display_text))
 
         return {
             "current_step_index": state.get("current_step_index", 0) + 1,

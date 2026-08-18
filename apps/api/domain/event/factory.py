@@ -77,8 +77,20 @@ def user_message(message: str) -> MessageStreamEvent:
     return MessageStreamEvent(role="user", message=message)
 
 
-def assistant_message(message: str) -> MessageStreamEvent:
-    return MessageStreamEvent(role="assistant", message=message)
+def assistant_message(
+    message: str,
+    *,
+    partial: bool = False,
+    stream_id: str | None = None,
+    attachments: list[dict[str, Any]] | None = None,
+) -> MessageStreamEvent:
+    return MessageStreamEvent(
+        role="assistant",
+        message=message,
+        partial=partial,
+        stream_id=stream_id,
+        attachments=list(attachments or []),
+    )
 
 
 def title_event(title: str) -> TitleStreamEvent:

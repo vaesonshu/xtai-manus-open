@@ -15,6 +15,8 @@ class MessageStreamEvent(StreamEvent):
     role: Literal["user", "assistant"] = "assistant"
     message: str = ""
     attachments: list[dict[str, Any]] = field(default_factory=list)
+    partial: bool = False
+    stream_id: str | None = None
 
     @property
     def type(self) -> str:
@@ -27,8 +29,11 @@ class MessageStreamEvent(StreamEvent):
                 "role": self.role,
                 "message": self.message,
                 "attachments": self.attachments,
+                "partial": self.partial,
             }
         )
+        if self.stream_id is not None:
+            payload["stream_id"] = self.stream_id
         return payload
 
 

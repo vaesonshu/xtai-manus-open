@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from domain.agent.role import AgentRole
 from domain.event import (
+    assistant_message,
     done_event,
     plan_created,
     step_completed,
@@ -64,3 +65,14 @@ def test_message_and_tool_events() -> None:
     assert called["status"] == ToolEventStatus.CALLED.value
 
     assert done_event().as_dict()["type"] == "done"
+
+
+def test_assistant_message_partial_serialization() -> None:
+    payload = assistant_message(
+        "生成中…",
+        partial=True,
+        stream_id="stream-1",
+    ).as_dict()
+    assert payload["partial"] is True
+    assert payload["stream_id"] == "stream-1"
+    assert payload["role"] == "assistant"

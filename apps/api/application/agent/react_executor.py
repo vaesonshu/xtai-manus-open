@@ -14,7 +14,7 @@ from application.agent.schemas import StepExecutionOutput, SummarizeOutput
 from application.agent.step_result import StepExecutionResult, SummarizeResult
 from application.memory.service import MemoryApplicationService
 from domain.agent.role import AgentRole
-from domain.event import error_event, tool_called, tool_calling
+from domain.event import assistant_message, error_event, tool_called, tool_calling
 from domain.event.base import StreamEvent
 from domain.exceptions import ValidationError, WaitForUserInputError
 from domain.memory.constants import MESSAGE_ASK_USER_TOOL
@@ -46,6 +46,7 @@ class ReActExecutor:
         self._tools = tool_registry
         self._json_parser = json_parser
         self._config = config or AgentExecutionConfig()
+        self._active_stream_id: str | None = None
 
     async def invoke(
         self,
@@ -57,10 +58,13 @@ class ReActExecutor:
     ) -> StepExecutionResult:
         """执行 ReAct 循环并返回结构化步骤结果。"""
         role_config = get_role_config(agent_role)
+        self._active_stream_id = str(uuid.uuid4()) if on_event is not None else None
         await self._ensure_system_prompt(task_id, agent_role, role_config.system_prompt)
         await self._add_messages(task_id, agent_role, [{"role": "user", "content": query}])
 
-        message = await self._invoke_llm(task_id, agent_role, role_config)
+        message = await self._invoke_llm(
+            task_id, agent_role, role_config, on_event=on_event
+        )
         content = await self._run_tool_loop(
             task_id=task_id,
             agent_role=agent_role,
@@ -68,7 +72,9 @@ class ReActExecutor:
             message=message,
             on_event=on_event,
         )
-        return await self._parse_step_output(content)
+        result = await self._parse_step_output(content)
+        await self._emit_final_assistant_message(on_event, result.display_text)
+        return result
 
     async def continue_after_user_input(
         self,
@@ -79,7 +85,10 @@ class ReActExecutor:
     ) -> StepExecutionResult:
         """用户回复后继续 ReAct（调用方应已执行 ``rollback_for_user_input``）。"""
         role_config = get_role_config(agent_role)
-        message = await self._invoke_llm(task_id, agent_role, role_config)
+        self._active_stream_id = str(uuid.uuid4()) if on_event is not None else None
+        message = await self._invoke_llm(
+            task_id, agent_role, role_config, on_event=on_event
+        )
         content = await self._run_tool_loop(
             task_id=task_id,
             agent_role=agent_role,
@@ -87,7 +96,9 @@ class ReActExecutor:
             message=message,
             on_event=on_event,
         )
-        return await self._parse_step_output(content)
+        result = await self._parse_step_output(content)
+        await self._emit_final_assistant_message(on_event, result.display_text)
+        return result
 
     async def summarize(
         self,
@@ -110,16 +121,24 @@ class ReActExecutor:
         await self._ensure_system_prompt(task_id, agent_role, role_config.system_prompt)
         await self._add_messages(task_id, agent_role, [{"role": "user", "content": query}])
 
+        self._active_stream_id = str(uuid.uuid4()) if on_event is not None else None
         message = await self._invoke_llm(
             task_id,
             agent_role,
             role_config,
             tool_choice_override="none",
+            on_event=on_event,
         )
         content = str(message.get("content") or "").strip()
         if not content:
             raise ValidationError("summarize returned empty content")
-        return await self._parse_summarize_output(content)
+        result = await self._parse_summarize_output(content)
+        await self._emit_final_assistant_message(
+            on_event,
+            result.message,
+            attachments=list(result.attachments),
+        )
+        return result
 
     async def _run_tool_loop(
         self,
@@ -190,6 +209,7 @@ class ReActExecutor:
                 agent_role,
                 role_config,
                 extra_messages=tool_messages,
+                on_event=on_event,
             )
         else:
             if on_event is not None:
@@ -213,6 +233,7 @@ class ReActExecutor:
         *,
         extra_messages: list[dict[str, Any]] | None = None,
         tool_choice_override: str | None = None,
+        on_event: OnEventCallback | None = None,
     ) -> dict[str, Any]:
         if extra_messages:
             await self._add_messages(task_id, agent_role, extra_messages)
@@ -222,16 +243,27 @@ class ReActExecutor:
         response_format = role_config.response_format
         tool_choice = tool_choice_override or role_config.tool_choice
         error = "调用语言模型发生错误"
+        use_stream = on_event is not None and hasattr(provider, "astream")
 
         for _ in range(self._config.max_retries):
             try:
                 conversation = self._memory.get_agent_conversation(task_id, agent_role)
-                message = await provider.invoke(
-                    messages=conversation.get_messages(),
-                    tools=tools or None,
-                    response_format=response_format,
-                    tool_choice=tool_choice,
-                )
+                if use_stream:
+                    message = await self._invoke_llm_stream(
+                        provider=provider,
+                        messages=conversation.get_messages(),
+                        tools=tools or None,
+                        response_format=response_format,
+                        tool_choice=tool_choice,
+                        on_event=on_event,
+                    )
+                else:
+                    message = await provider.invoke(
+                        messages=conversation.get_messages(),
+                        tools=tools or None,
+                        response_format=response_format,
+                        tool_choice=tool_choice,
+                    )
 
                 filtered = self._normalize_assistant_message(message)
                 if not self._has_llm_output(filtered):
@@ -257,6 +289,70 @@ class ReActExecutor:
         raise ValidationError(
             f"调用语言模型失败，已达最大重试次数({self._config.max_retries}): {error}"
         )
+
+    async def _invoke_llm_stream(
+        self,
+        *,
+        provider: Any,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None,
+        response_format: dict[str, Any] | None,
+        tool_choice: str | None,
+        on_event: OnEventCallback | None,
+    ) -> dict[str, Any]:
+        """通过 LLM.astream 流式输出，并向 SSE 推送 partial 消息。"""
+        stream_id = self._active_stream_id or str(uuid.uuid4())
+        self._active_stream_id = stream_id
+        final_message: dict[str, Any] = {"role": "assistant", "content": ""}
+
+        async for chunk in provider.astream(
+            messages=messages,
+            tools=tools,
+            response_format=response_format,
+            tool_choice=tool_choice,
+        ):
+            if chunk.get("partial"):
+                text = str(chunk.get("content") or "")
+                if text and on_event is not None:
+                    await on_event(
+                        assistant_message(text, partial=True, stream_id=stream_id)
+                    )
+                continue
+
+            final_message = {
+                key: value for key, value in chunk.items() if key != "partial"
+            }
+
+        if final_message.get("tool_calls"):
+            return final_message
+
+        content = str(final_message.get("content") or "")
+        if content and on_event is not None:
+            await on_event(
+                assistant_message(content, partial=True, stream_id=stream_id)
+            )
+        return final_message
+
+    async def _emit_final_assistant_message(
+        self,
+        on_event: OnEventCallback | None,
+        message: str,
+        *,
+        attachments: list[Any] | None = None,
+    ) -> None:
+        """推送解析后的最终助手消息，替换流式中间帧。"""
+        if on_event is None or not message.strip():
+            return
+        stream_id = self._active_stream_id or str(uuid.uuid4())
+        await on_event(
+            assistant_message(
+                message,
+                partial=False,
+                stream_id=stream_id,
+                attachments=attachments,
+            )
+        )
+        self._active_stream_id = None
 
     async def _invoke_tool(
         self,

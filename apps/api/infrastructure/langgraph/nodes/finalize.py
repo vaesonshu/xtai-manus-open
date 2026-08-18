@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from domain.event import assistant_message, done_event, error_event, plan_completed
+from domain.event import done_event, error_event, plan_completed
 from domain.task.identifiers import TaskId
 from domain.task.status import TaskStatus
 from infrastructure.langgraph.dependencies import GraphNodeDependencies
@@ -24,10 +24,16 @@ def make_summarize_node(
 
         summarize_fn = getattr(deps.step_executor, "summarize", None)
         if summarize_fn is not None:
+
+            async def on_event(event) -> None:
+                await emitter.emit(event)
+
             try:
-                summary = await summarize_fn(task_id=task_id, goal=goal)
-                if summary.message:
-                    await emitter.emit(assistant_message(summary.message))
+                summary = await summarize_fn(
+                    task_id=task_id,
+                    goal=goal,
+                    on_event=on_event,
+                )
                 summary_payload = {
                     "summary": summary.message,
                     "attachments": list(summary.attachments),
