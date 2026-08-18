@@ -15,7 +15,8 @@ from application.memory.service import MemoryApplicationService
 from domain.agent.role import AgentRole
 from domain.event import error_event, tool_called, tool_calling
 from domain.event.base import StreamEvent
-from domain.exceptions import ValidationError
+from domain.exceptions import ValidationError, WaitForUserInputError
+from domain.memory.constants import MESSAGE_ASK_USER_TOOL
 from domain.ports.llm import LlmRuntimePort
 from domain.task.identifiers import TaskId
 from domain.tool.result import ToolResult
@@ -56,6 +57,42 @@ class ReActExecutor:
         await self._add_messages(task_id, agent_role, [{"role": "user", "content": query}])
 
         message = await self._invoke_llm(task_id, agent_role, role_config)
+        return await self._run_tool_loop(
+            task_id=task_id,
+            agent_role=agent_role,
+            role_config=role_config,
+            message=message,
+            on_event=on_event,
+        )
+
+    async def continue_after_user_input(
+        self,
+        *,
+        task_id: TaskId,
+        agent_role: AgentRole,
+        on_event: OnEventCallback | None = None,
+    ) -> str:
+        """用户回复后继续 ReAct（调用方应已执行 ``rollback_for_user_input``）。"""
+        role_config = get_role_config(agent_role)
+        message = await self._invoke_llm(task_id, agent_role, role_config)
+        return await self._run_tool_loop(
+            task_id=task_id,
+            agent_role=agent_role,
+            role_config=role_config,
+            message=message,
+            on_event=on_event,
+        )
+
+    async def _run_tool_loop(
+        self,
+        *,
+        task_id: TaskId,
+        agent_role: AgentRole,
+        role_config: RoleConfig,
+        message: dict[str, Any],
+        on_event: OnEventCallback | None,
+    ) -> str:
+        """工具调用迭代，直至 assistant 返回纯文本。"""
         for _ in range(self._config.max_iterations):
             tool_calls = message.get("tool_calls") or []
             if not tool_calls:
@@ -67,6 +104,15 @@ class ReActExecutor:
                 function = tool_call.get("function") or {}
                 function_name = str(function.get("name", ""))
                 function_args = self._parse_tool_arguments(function.get("arguments"))
+
+                if function_name == MESSAGE_ASK_USER_TOOL:
+                    question = self._extract_ask_user_question(function_args)
+                    raise WaitForUserInputError(
+                        "等待用户输入",
+                        agent_role=agent_role,
+                        question=question,
+                    )
+
                 tool = self._tools.resolve(function_name)
 
                 if on_event is not None:
@@ -96,6 +142,7 @@ class ReActExecutor:
                     {
                         "role": "tool",
                         "tool_call_id": tool_call_id,
+                        "function_name": function_name,
                         "content": result.to_tool_content(),
                     }
                 )
@@ -147,6 +194,11 @@ class ReActExecutor:
                 )
 
                 filtered = self._normalize_assistant_message(message)
+                if not self._has_llm_output(filtered):
+                    logger.warning("LLM 返回空内容，准备重试")
+                    await asyncio.sleep(self._config.retry_interval)
+                    continue
+
                 await self._add_messages(task_id, agent_role, [filtered])
                 return filtered
             except Exception as exc:  # noqa: BLE001
@@ -195,6 +247,22 @@ class ReActExecutor:
     ) -> None:
         for message in messages:
             self._memory.add_agent_message(task_id, agent_role, message)
+
+    @staticmethod
+    def _extract_ask_user_question(arguments: dict[str, Any]) -> str:
+        """从 ``message_ask_user`` 参数中提取问题文本。"""
+        for key in ("question", "text", "message", "content"):
+            value = arguments.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+        return "请补充更多信息。"
+
+    @staticmethod
+    def _has_llm_output(message: dict[str, Any]) -> bool:
+        """判断 LLM 响应是否包含可用内容（文本或工具调用）。"""
+        content = str(message.get("content") or "").strip()
+        tool_calls = message.get("tool_calls") or []
+        return bool(content or tool_calls)
 
     @staticmethod
     def _normalize_assistant_message(message: dict[str, Any]) -> dict[str, Any]:

@@ -25,11 +25,11 @@ class RoleConfig:
 ROLE_CONFIG: dict[AgentRole, RoleConfig] = {
     AgentRole.RESEARCHER: RoleConfig(
         system_prompt=_BASE_SYSTEM + "你擅长信息收集与调研，可使用 echo 工具验证流程。",
-        tool_names=("echo",),
+        tool_names=("echo", "message_ask_user"),
     ),
     AgentRole.CODER: RoleConfig(
         system_prompt=_BASE_SYSTEM + "你擅长整理方案与生成可交付内容。",
-        tool_names=("echo",),
+        tool_names=("echo", "message_ask_user"),
     ),
     AgentRole.REVIEWER: RoleConfig(
         system_prompt=_BASE_SYSTEM + "你负责复核质量与完整性，输出简明结论。",

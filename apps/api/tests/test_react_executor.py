@@ -11,9 +11,11 @@ from application.agent.config import AgentExecutionConfig
 from application.agent.react_executor import ReActExecutor
 from application.memory.service import MemoryApplicationService
 from domain.agent.role import AgentRole
+from domain.exceptions import WaitForUserInputError
 from domain.task.identifiers import TaskId
 from infrastructure.memory.in_memory_repository import InMemoryMemoryStoreRepository
 from infrastructure.tools import MockToolKit, ToolRegistry
+from infrastructure.tools.interaction_toolkit import build_interaction_toolkit
 
 
 class ScriptedLlmProvider:
@@ -131,3 +133,70 @@ async def test_react_executor_tool_loop_emits_events() -> None:
 
     assert result == "工具已执行，步骤完成。"
     assert events == ["tool", "tool"]
+
+
+@pytest.mark.asyncio
+async def test_react_executor_empty_response_retries() -> None:
+    memory_service = MemoryApplicationService(InMemoryMemoryStoreRepository())
+    runtime = ScriptedLlmRuntime(
+        ScriptedLlmProvider(
+            [
+                {"role": "assistant", "content": ""},
+                {"role": "assistant", "content": "重试后获得有效回复。"},
+            ]
+        )
+    )
+    executor = ReActExecutor(
+        llm_runtime=runtime,
+        memory_service=memory_service,
+        tool_registry=ToolRegistry([MockToolKit()]),
+        config=AgentExecutionConfig(max_retries=3, retry_interval=0),
+    )
+
+    result = await executor.invoke(
+        task_id=TaskId(),
+        agent_role=AgentRole.REVIEWER,
+        query="测试空回复重试",
+    )
+    assert result == "重试后获得有效回复。"
+
+
+@pytest.mark.asyncio
+async def test_react_executor_message_ask_user_raises_wait() -> None:
+    memory_service = MemoryApplicationService(InMemoryMemoryStoreRepository())
+    runtime = ScriptedLlmRuntime(
+        ScriptedLlmProvider(
+            [
+                {
+                    "role": "assistant",
+                    "content": "",
+                    "tool_calls": [
+                        {
+                            "id": "call-ask",
+                            "type": "function",
+                            "function": {
+                                "name": "message_ask_user",
+                                "arguments": '{"question": "请确认目标？"}',
+                            },
+                        }
+                    ],
+                }
+            ]
+        )
+    )
+    executor = ReActExecutor(
+        llm_runtime=runtime,
+        memory_service=memory_service,
+        tool_registry=ToolRegistry([build_interaction_toolkit()]),
+        config=AgentExecutionConfig(max_retries=1, retry_interval=0),
+    )
+
+    with pytest.raises(WaitForUserInputError) as exc_info:
+        await executor.invoke(
+            task_id=TaskId(),
+            agent_role=AgentRole.RESEARCHER,
+            query="需要用户确认",
+        )
+
+    assert exc_info.value.question == "请确认目标？"
+    assert exc_info.value.agent_role is AgentRole.RESEARCHER

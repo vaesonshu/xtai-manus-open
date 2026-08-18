@@ -17,13 +17,16 @@ from domain.event import (
     step_completed,
     step_started,
     user_message,
+    wait_event,
 )
 from domain.event.base import StreamEvent
+from domain.exceptions import WaitForUserInputError
 from domain.memory.kind import MemoryKind
 from domain.planning.step_spec import PlanStepSpec
 from domain.ports.task import TaskRepository
 from domain.task.identifiers import TaskId
 from domain.task.ports import TaskExecutionPort
+from domain.task.status import ExecutionStatus, TaskStatus
 from domain.task.step import TaskStep
 from domain.task.task import AgentTask
 
@@ -53,9 +56,25 @@ class AgentTaskRunner:
         self._replan_after_each_step = replan_after_each_step
 
     async def invoke(self, execution: TaskExecutionPort) -> None:
-        """驱动一次完整的 Agent 任务执行。"""
+        """驱动一次完整的 Agent 任务执行（支持新建与 WAITING 恢复）。"""
         task_id = TaskId(execution.task_id)
+        agent_task = self._tasks.get(task_id)
+
+        if agent_task is not None and agent_task.status is TaskStatus.WAITING:
+            await self._resume_from_waiting(execution, agent_task, task_id)
+            return
+
         goal = await self._read_goal(execution)
+        if agent_task is not None and agent_task.status is TaskStatus.RUNNING:
+            self._memory.rollback_for_user_input(
+                task_id,
+                AgentRole.COORDINATOR,
+                goal,
+            )
+            await self._emit(execution, user_message(goal))
+            await self._run_execution_loop(execution, agent_task, task_id, goal)
+            return
+
         agent_task = AgentTask.create(goal=goal, task_id=task_id)
         self._tasks.save(agent_task)
 
@@ -80,37 +99,96 @@ class AgentTaskRunner:
         if plan.message:
             await self._emit(execution, assistant_message(plan.message))
 
-        while agent_task.plan is not None:
-            next_step = agent_task.plan.get_next_step()
-            if next_step is None:
-                break
+        await self._run_execution_loop(execution, agent_task, task_id, goal)
 
-            step = agent_task.begin_next_step()
-            await self._emit(execution, step_started(step))
+    async def destroy(self) -> None:
+        """释放运行器资源（当前无状态，预留扩展）。"""
+        return None
 
-            result = await self._execute_step(task_id, step, execution)
-            agent_task.complete_current_step(result)
+    async def on_done(self, execution: TaskExecutionPort) -> None:
+        """任务结束回调：压缩记忆并清理工作区。"""
+        task_id = TaskId(execution.task_id)
+        agent_task = self._tasks.get(task_id)
+        if agent_task is not None and agent_task.status is TaskStatus.WAITING:
+            logger.info("任务[%s]处于等待用户输入，跳过 on_done 清理", task_id)
+            return
+        self._memory.clear_working(task_id)
+        self._memory.compact_conversations(task_id)
+        logger.info("任务[%s]执行结束，记忆已压缩", task_id)
 
-            self._memory.add_agent_message(
-                task_id,
-                step.agent_role,
-                {"role": "assistant", "content": result},
-            )
-            self._memory.record(
-                task_id,
-                kind=MemoryKind.WORKING,
-                content=result,
-                agent_role=step.agent_role,
-            )
-            self._memory.compact_conversations(task_id)
+    async def _resume_from_waiting(
+        self,
+        execution: TaskExecutionPort,
+        agent_task: AgentTask,
+        task_id: TaskId,
+    ) -> None:
+        """从 WAITING 状态恢复：智能回滚记忆并继续当前步骤。"""
+        user_input = await self._read_goal(execution)
+        await self._emit(execution, user_message(user_input))
+
+        waiting_role = agent_task.waiting_agent_role or AgentRole.COORDINATOR
+        self._memory.rollback_for_user_input(task_id, waiting_role, user_input)
+
+        agent_task.resume()
+        self._tasks.save(agent_task)
+
+        step = self._get_running_step(agent_task)
+        if step is None:
+            agent_task.fail("恢复执行失败：无运行中的步骤")
             self._tasks.save(agent_task)
+            return
 
-            await self._emit(execution, step_completed(step))
-            await self._emit(execution, assistant_message(result))
+        try:
+            result = await self._execute_step(
+                task_id,
+                step,
+                execution,
+                resume=True,
+            )
+        except WaitForUserInputError as exc:
+            await self._handle_wait_for_user(execution, agent_task, exc)
+            return
+
+        await self._after_step_success(execution, agent_task, task_id, step, result)
+        await self._run_execution_loop(execution, agent_task, task_id, agent_task.goal)
+
+    async def _run_execution_loop(
+        self,
+        execution: TaskExecutionPort,
+        agent_task: AgentTask,
+        task_id: TaskId,
+        goal: str,
+    ) -> None:
+        """步骤执行主循环。"""
+        while agent_task.plan is not None:
+            running_step = self._get_running_step(agent_task)
+            if running_step is not None:
+                step = running_step
+            else:
+                next_step = agent_task.plan.get_next_step()
+                if next_step is None:
+                    break
+                step = agent_task.begin_next_step()
+                await self._emit(execution, step_started(step))
+
+            try:
+                result = await self._execute_step(task_id, step, execution)
+            except WaitForUserInputError as exc:
+                await self._handle_wait_for_user(execution, agent_task, exc)
+                return
+
+            await self._after_step_success(
+                execution,
+                agent_task,
+                task_id,
+                step,
+                result,
+            )
 
             if (
                 self._replan_after_each_step
                 and self._use_llm_planning
+                and agent_task.plan is not None
                 and agent_task.plan.get_next_step() is not None
             ):
                 await self._planning.update_plan_after_step(agent_task, step)
@@ -130,16 +208,53 @@ class AgentTaskRunner:
             await self._emit(execution, plan_completed(agent_task.plan))
         await self._emit(execution, done_event())
 
-    async def destroy(self) -> None:
-        """释放运行器资源（当前无状态，预留扩展）。"""
-        return None
+    async def _after_step_success(
+        self,
+        execution: TaskExecutionPort,
+        agent_task: AgentTask,
+        task_id: TaskId,
+        step: TaskStep,
+        result: str,
+    ) -> None:
+        """步骤成功后的记忆写入与事件推送。"""
+        agent_task.complete_current_step(result)
 
-    async def on_done(self, execution: TaskExecutionPort) -> None:
-        """任务结束回调：压缩记忆并清理工作区。"""
-        task_id = TaskId(execution.task_id)
-        self._memory.clear_working(task_id)
+        self._memory.add_agent_message(
+            task_id,
+            step.agent_role,
+            {"role": "assistant", "content": result},
+        )
+        self._memory.record(
+            task_id,
+            kind=MemoryKind.WORKING,
+            content=result,
+            agent_role=step.agent_role,
+        )
         self._memory.compact_conversations(task_id)
-        logger.info("任务[%s]执行结束，记忆已压缩", task_id)
+        self._tasks.save(agent_task)
+
+        await self._emit(execution, step_completed(step))
+        await self._emit(execution, assistant_message(result))
+
+    async def _handle_wait_for_user(
+        self,
+        execution: TaskExecutionPort,
+        agent_task: AgentTask,
+        exc: WaitForUserInputError,
+    ) -> None:
+        """进入 WAITING 状态并推送等待事件（不发送 done）。"""
+        agent_task.wait_for_input(exc.message, agent_role=exc.agent_role)
+        self._tasks.save(agent_task)
+        await self._emit(
+            execution,
+            wait_event(reason=exc.message, question=exc.question),
+        )
+        await self._emit(execution, assistant_message(exc.question))
+        logger.info(
+            "任务[%s]等待用户输入，agent=%s",
+            agent_task.task_id,
+            exc.agent_role.value,
+        )
 
     async def _read_goal(self, execution: TaskExecutionPort) -> str:
         """从输入流读取用户目标。"""
@@ -179,6 +294,8 @@ class AgentTaskRunner:
         task_id: TaskId,
         step: TaskStep,
         execution: TaskExecutionPort,
+        *,
+        resume: bool = False,
     ) -> str:
         """执行单步：委托 StepExecutor / ReActExecutor，并转发工具等事件。"""
 
@@ -189,6 +306,21 @@ class AgentTaskRunner:
             task_id=task_id,
             step=step,
             on_event=on_event,
+            resume=resume,
+        )
+
+    @staticmethod
+    def _get_running_step(agent_task: AgentTask) -> TaskStep | None:
+        """获取当前运行中的步骤（WAITING 恢复时使用）。"""
+        if agent_task.plan is None:
+            return None
+        return next(
+            (
+                item
+                for item in agent_task.plan.steps
+                if item.status is ExecutionStatus.RUNNING
+            ),
+            None,
         )
 
     @staticmethod

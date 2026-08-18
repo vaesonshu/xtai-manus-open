@@ -5,8 +5,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from typing import Any
-
 from domain.agent.role import AgentRole
 from domain.exceptions import NotFoundError, ValidationError
 from domain.memory.conversation import ConversationMemory
@@ -128,6 +126,14 @@ class TaskMemoryStore:
     def rollback_agent_message(self, agent_role: AgentRole) -> None:
         """回滚指定 Agent 的最后一条对话消息。"""
         self.get_agent_conversation(agent_role).roll_back()
+
+    def rollback_for_user_input(
+        self,
+        agent_role: AgentRole,
+        user_content: str,
+    ) -> None:
+        """用户续聊时对指定 Agent 执行智能回滚。"""
+        self.get_agent_conversation(agent_role).roll_back_for_user_input(user_content)
 
     def build_agent_messages_context(
         self,

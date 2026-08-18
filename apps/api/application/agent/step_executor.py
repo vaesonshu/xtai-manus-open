@@ -25,8 +25,16 @@ class StepExecutor:
         task_id: TaskId,
         step: TaskStep,
         on_event: OnEventCallback | None = None,
+        resume: bool = False,
     ) -> str:
         """执行单个规划步骤并返回文本结果。"""
+        if resume:
+            return await self._react.continue_after_user_input(
+                task_id=task_id,
+                agent_role=step.agent_role,
+                on_event=on_event,
+            )
+
         query = EXECUTION_PROMPT.format(
             step_description=step.description,
             agent_role=step.agent_role.value,
@@ -48,6 +56,7 @@ class OfflineStepExecutor:
         task_id: TaskId,
         step: TaskStep,
         on_event: OnEventCallback | None = None,
+        resume: bool = False,
     ) -> str:
-        del task_id, on_event
+        del task_id, on_event, resume
         return f"[{step.agent_role.value}] 已完成：{step.description}"

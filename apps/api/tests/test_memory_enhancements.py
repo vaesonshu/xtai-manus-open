@@ -28,6 +28,39 @@ def test_conversation_memory_compact_and_rollback() -> None:
     assert memory.get_last_message()["content"] == "hello"
 
 
+def test_conversation_memory_rollback_for_user_input_ask_user() -> None:
+    """message_ask_user 场景：应追加 tool 回复而非删除 assistant。"""
+    memory = ConversationMemory()
+    memory.add_message(
+        {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [
+                {
+                    "id": "call-1",
+                    "type": "function",
+                    "function": {"name": "message_ask_user", "arguments": "{}"},
+                }
+            ],
+        }
+    )
+    memory.roll_back_for_user_input("用户的回答")
+    assert len(memory.messages) == 2
+    tool_msg = memory.get_last_message()
+    assert tool_msg["role"] == "tool"
+    assert tool_msg["function_name"] == "message_ask_user"
+    assert tool_msg["content"] == "用户的回答"
+
+
+def test_conversation_memory_rollback_for_user_input_plain() -> None:
+    """非 ask_user 场景：删除最后一条 assistant 消息。"""
+    memory = ConversationMemory()
+    memory.add_message({"role": "user", "content": "hello"})
+    memory.add_message({"role": "assistant", "content": "partial"})
+    memory.roll_back_for_user_input("续聊内容")
+    assert memory.get_last_message()["content"] == "hello"
+
+
 def test_task_memory_store_per_agent_conversations() -> None:
     store = TaskMemoryStore.create(TaskId())
     store.add_agent_message(AgentRole.RESEARCHER, {"role": "user", "content": "调研"})

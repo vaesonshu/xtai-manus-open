@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from domain.agent.role import AgentRole
+
 
 class DomainError(Exception):
     """领域异常基类。
@@ -46,3 +48,22 @@ class LlmInvokeError(DomainError):
 
     code = "llm_invoke_error"
     status_code = 502
+
+
+class WaitForUserInputError(DomainError):
+    """Agent 需要用户输入后才能继续执行（非致命，由 Runner 转为 WAITING 状态）。"""
+
+    code = "wait_for_user_input"
+    status_code = 202
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        agent_role: AgentRole,
+        question: str,
+        details: dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__(message, details=details)
+        self.agent_role = agent_role
+        self.question = question

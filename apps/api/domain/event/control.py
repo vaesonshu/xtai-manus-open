@@ -52,9 +52,18 @@ class TitleStreamEvent(StreamEvent):
 class WaitStreamEvent(StreamEvent):
     """等待用户输入事件。"""
 
+    reason: str = ""
+    question: str = ""
+
     @property
     def type(self) -> str:
         return "wait"
+
+    def as_dict(self) -> dict[str, Any]:
+        payload = super().as_dict()
+        payload["reason"] = self.reason
+        payload["question"] = self.question
+        return payload
 
 
 @dataclass

@@ -38,6 +38,38 @@ class AgentRunModel(Base):
     )
 
 
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+
+class TaskMemoryModel(Base):
+    """任务记忆表：持久化 ``TaskMemoryStore`` 聚合根快照。"""
+
+    __tablename__ = "task_memories"
+
+    task_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    data: Mapped[dict] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"),
+        nullable=False,
+        default=dict,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+
 class LlmConfigModel(Base):
     """LLM 配置表：持久化系统级单例配置。"""
 

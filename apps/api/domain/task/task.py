@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from domain.agent.role import AgentRole
 from domain.exceptions import ConflictError, ValidationError
 from domain.planning.step_spec import PlanStepSpec
 from domain.task.events import (
@@ -45,6 +46,8 @@ class AgentTask:
     plan_history: list[PlanSnapshot] = field(default_factory=list)
     result: dict[str, Any] = field(default_factory=dict)
     error: str | None = None
+    # 等待用户输入时，记录是哪个 Agent 发起的提问
+    waiting_agent_role: AgentRole | None = None
 
     _events: list[TaskDomainEvent] = field(default_factory=list, init=False, repr=False)
 
@@ -80,11 +83,17 @@ class AgentTask:
         self.status = TaskStatus.RUNNING
         self._events.append(TaskStarted(task_id=self.task_id))
 
-    def wait_for_input(self, reason: str = "") -> None:
+    def wait_for_input(
+        self,
+        reason: str = "",
+        *,
+        agent_role: AgentRole | None = None,
+    ) -> None:
         """进入等待用户输入状态（Manus 类交互场景）。"""
         if self.status is not TaskStatus.RUNNING:
             raise ConflictError(f"cannot wait in status {self.status}")
         self.status = TaskStatus.WAITING
+        self.waiting_agent_role = agent_role
         self._events.append(TaskWaiting(task_id=self.task_id, reason=reason))
 
     def resume(self) -> None:
@@ -92,6 +101,7 @@ class AgentTask:
         if self.status is not TaskStatus.WAITING:
             raise ConflictError(f"cannot resume task in status {self.status}")
         self.status = TaskStatus.RUNNING
+        self.waiting_agent_role = None
 
     def begin_next_step(self) -> TaskStep:
         """开始执行规划中的下一步，并发布步骤开始事件。"""

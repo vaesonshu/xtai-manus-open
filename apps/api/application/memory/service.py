@@ -102,3 +102,14 @@ class MemoryApplicationService:
         store = self.get_store(task_id)
         store.rollback_agent_message(agent_role)
         self._repository.save(store)
+
+    def rollback_for_user_input(
+        self,
+        task_id: TaskId,
+        agent_role: AgentRole,
+        user_content: str,
+    ) -> None:
+        """用户续聊时执行智能回滚（``message_ask_user`` 补 tool，否则删最后一条）。"""
+        store = self.get_store(task_id)
+        store.rollback_for_user_input(agent_role, user_content)
+        self._repository.save(store)

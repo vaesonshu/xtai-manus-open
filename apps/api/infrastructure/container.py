@@ -37,9 +37,11 @@ from infrastructure.persistence.caching_repository import CachingAgentRunReposit
 from infrastructure.persistence.database import Database
 from infrastructure.persistence.llm_config_repository import PostgresLlmConfigRepository
 from infrastructure.persistence.in_memory_task_repository import InMemoryTaskRepository
+from infrastructure.persistence.postgres_memory_repository import PostgresMemoryStoreRepository
 from infrastructure.persistence.postgres_repository import PostgresAgentRunRepository
 from infrastructure.persistence.repository import InMemoryAgentRunRepository
 from infrastructure.tools import ToolRegistry, build_mock_toolkit
+from infrastructure.tools.interaction_toolkit import build_interaction_toolkit
 
 logger = logging.getLogger(__name__)
 
@@ -84,7 +86,7 @@ class Container:
         self.llm_invoke_service = LlmInvokeApplicationService(runtime=self.llm_runtime)
 
         # 记忆与多 Agent 规划
-        self.memory_repository = InMemoryMemoryStoreRepository()
+        self.memory_repository = self._build_memory_repository(settings)
         self.memory_service = MemoryApplicationService(self.memory_repository)
         self.planning_service = PlanningApplicationService(
             llm_runtime=self.llm_runtime,
@@ -93,7 +95,9 @@ class Container:
         self.task_repository = InMemoryTaskRepository()
         self.task_service = TaskApplicationService(self.task_repository)
 
-        tool_registry = ToolRegistry([build_mock_toolkit()])
+        tool_registry = ToolRegistry(
+            [build_mock_toolkit(), build_interaction_toolkit()]
+        )
         react_executor = ReActExecutor(
             llm_runtime=self.llm_runtime,
             memory_service=self.memory_service,
@@ -174,6 +178,13 @@ class Container:
         if self.database is None:
             raise RuntimeError("database_enabled=True 但 Database 未初始化")
         return PostgresLlmConfigRepository(self.database)
+
+    def _build_memory_repository(self, settings: Settings) -> InMemoryMemoryStoreRepository | PostgresMemoryStoreRepository:
+        if not settings.database_enabled:
+            return InMemoryMemoryStoreRepository()
+        if self.database is None:
+            raise RuntimeError("database_enabled=True 但 Database 未初始化")
+        return PostgresMemoryStoreRepository(self.database)
 
 
 def build_container(settings: Settings) -> Container:

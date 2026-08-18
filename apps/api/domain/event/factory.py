@@ -83,8 +83,8 @@ def title_event(title: str) -> TitleStreamEvent:
     return TitleStreamEvent(title=title)
 
 
-def wait_event() -> WaitStreamEvent:
-    return WaitStreamEvent()
+def wait_event(*, reason: str = "", question: str = "") -> WaitStreamEvent:
+    return WaitStreamEvent(reason=reason, question=question)
 
 
 def error_event(error: str) -> ErrorStreamEvent:
