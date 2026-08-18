@@ -20,6 +20,22 @@ __all__ = [
 ]
 
 
+def _ensure_strict_required(schema: dict) -> dict:
+    """OpenAI strict json_schema 要求 object 的 required 包含全部 properties。"""
+    if schema.get("type") == "object" and "properties" in schema:
+        schema["required"] = list(schema["properties"].keys())
+        schema["additionalProperties"] = False
+
+    for def_schema in schema.get("$defs", {}).values():
+        _ensure_strict_required(def_schema)
+
+    items = schema.get("items")
+    if isinstance(items, dict):
+        _ensure_strict_required(items)
+
+    return schema
+
+
 def build_plan_response_format() -> dict:
     """由 Pydantic 模型生成 OpenAI ``json_schema`` 响应格式。"""
     return {
@@ -27,7 +43,7 @@ def build_plan_response_format() -> dict:
         "json_schema": {
             "name": "multi_agent_plan",
             "strict": True,
-            "schema": LlmPlanOutput.model_json_schema(),
+            "schema": _ensure_strict_required(LlmPlanOutput.model_json_schema()),
         },
     }
 

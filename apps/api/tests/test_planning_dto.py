@@ -43,6 +43,10 @@ def test_plan_response_format_generated_from_pydantic() -> None:
     schema = response_format["json_schema"]["schema"]
     assert schema["type"] == "object"
     assert "steps" in schema["properties"]
+    assert set(schema["required"]) == set(schema["properties"].keys())
+
+    step_schema = schema["$defs"]["PlanStepDto"]
+    assert set(step_schema["required"]) == set(step_schema["properties"].keys())
 
 def test_plan_step_dto_to_spec() -> None:
     dto = PlanStepDto(agent_role="reviewer", description="复核")

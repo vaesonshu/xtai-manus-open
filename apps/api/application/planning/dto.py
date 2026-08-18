@@ -25,7 +25,8 @@ class PlanStepDto(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    agent_role: AgentRoleLiteral = "executor"
+    # strict json_schema 下带 default 的字段不会进入 required，需显式必填
+    agent_role: AgentRoleLiteral = Field(...)
     description: str = Field(..., min_length=1)
 
     def to_spec(self) -> PlanStepSpec:
@@ -42,7 +43,7 @@ class LlmPlanOutput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     title: str = Field(..., min_length=1)
-    message: str = ""
+    message: str = Field(...)
     steps: list[PlanStepDto] = Field(..., min_length=1)
 
     def to_step_specs(self) -> list[PlanStepSpec]:
