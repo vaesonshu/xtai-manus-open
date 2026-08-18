@@ -29,3 +29,17 @@ class HealthResponse(BaseModel):
     status: str
     service: str
     env: str
+
+
+class ErrorDetail(BaseModel):
+    """错误详情（统一错误响应的内层结构）。"""
+
+    code: str
+    message: str
+    details: dict[str, Any] = Field(default_factory=dict)
+
+
+class ErrorResponse(BaseModel):
+    """统一错误响应体。"""
+
+    error: ErrorDetail

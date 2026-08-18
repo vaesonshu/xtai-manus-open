@@ -1,6 +1,7 @@
 """领域层聚合根测试。"""
 
 from domain.agent.entity import AgentRun, RunStatus
+from domain.exceptions import ConflictError
 
 
 def test_create_run_publishes_started_event() -> None:
@@ -30,7 +31,7 @@ def test_cannot_complete_before_start() -> None:
     run = AgentRun.create(goal="x")
     try:
         run.complete(result={})
-    except ValueError:
+    except ConflictError:
         pass
     else:
-        raise AssertionError("expected ValueError")
+        raise AssertionError("expected ConflictError")

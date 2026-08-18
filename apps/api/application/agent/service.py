@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from application.agent.dto import AgentRunDTO, StartAgentRunCommand
 from domain.agent.entity import AgentRun
+from domain.exceptions import NotFoundError
 from domain.ports import AgentRunRepository, EventBus
 from domain.primitives import RunId
 
@@ -39,11 +40,11 @@ class AgentApplicationService:
             error=run.error,
         )
 
-    def get(self, run_id: str) -> AgentRunDTO | None:
-        """按 ID 查询运行状态。"""
+    def get(self, run_id: str) -> AgentRunDTO:
+        """按 ID 查询运行状态；不存在时抛出 ``NotFoundError``。"""
         run = self._repository.get(RunId(run_id))
         if run is None:
-            return None
+            raise NotFoundError(f"run not found: {run_id}")
         return AgentRunDTO.from_entity(
             run_id=run.run_id,
             goal=run.goal,

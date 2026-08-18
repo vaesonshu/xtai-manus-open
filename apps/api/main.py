@@ -5,10 +5,12 @@ from __future__ import annotations
 import logging
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from infrastructure import get_settings
 from infrastructure.logging_ import setup_logging
 from presentation.api.routes import api_router
+from presentation.exception_handlers import register_exception_handlers
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +27,17 @@ def create_app() -> FastAPI:
         debug=settings.debug,
         version="0.0.1",
     )
+
+    # 跨域中间件需在路由注册前挂载，以便预检 OPTIONS 请求也能被正确处理
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.cors_origins,
+        allow_credentials=settings.cors_allow_credentials,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+    register_exception_handlers(app, debug=settings.debug)
 
     app.include_router(api_router)
 

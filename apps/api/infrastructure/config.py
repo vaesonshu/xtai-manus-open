@@ -3,8 +3,23 @@
 from __future__ import annotations
 
 from functools import lru_cache
+from typing import Annotated, Any
 
+from pydantic import BeforeValidator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+def _parse_cors_origins(value: Any) -> list[str]:
+    """将环境变量中的逗号分隔字符串解析为来源列表。"""
+    if isinstance(value, str):
+        return [origin.strip() for origin in value.split(",") if origin.strip()]
+    if isinstance(value, list):
+        return value
+    raise TypeError("CORS_ORIGINS 必须是逗号分隔字符串或字符串列表")
+
+
+# 支持 CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000 形式
+CorsOrigins = Annotated[list[str], BeforeValidator(_parse_cors_origins)]
 
 
 class Settings(BaseSettings):
@@ -21,6 +36,13 @@ class Settings(BaseSettings):
     debug: bool = True
     api_host: str = "0.0.0.0"
     api_port: int = 8000
+
+    # CORS：默认放行本地 Next.js 开发服务器
+    cors_origins: CorsOrigins = [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ]
+    cors_allow_credentials: bool = True
 
     # LLM
     openai_api_key: str = "sk-dummy"

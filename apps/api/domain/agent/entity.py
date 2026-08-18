@@ -12,6 +12,7 @@ from domain.agent.events import (
     AgentRunProgressed,
     AgentRunStarted,
 )
+from domain.exceptions import ConflictError, ValidationError
 from domain.primitives import DomainEvent, RunId
 
 
@@ -44,7 +45,7 @@ class AgentRun:
     def create(cls, goal: str, run_id: RunId | None = None) -> AgentRun:
         """创建一次新运行并发布 ``AgentRunStarted`` 事件。"""
         if not goal or not goal.strip():
-            raise ValueError("goal must not be empty")
+            raise ValidationError("goal must not be empty")
         run = cls(run_id=run_id or RunId(), goal=goal.strip())
         run._events.append(AgentRunStarted(run_id=run.run_id, goal=run.goal))
         return run
@@ -52,13 +53,13 @@ class AgentRun:
     def start(self) -> None:
         """标记运行进入执行态。"""
         if self.status is not RunStatus.CREATED:
-            raise ValueError(f"cannot start run in status {self.status}")
+            raise ConflictError(f"cannot start run in status {self.status}")
         self.status = RunStatus.RUNNING
 
     def record_progress(self, step: int, message: str) -> None:
         """记录阶段性进展。"""
         if self.status is not RunStatus.RUNNING:
-            raise ValueError(f"cannot record progress in status {self.status}")
+            raise ConflictError(f"cannot record progress in status {self.status}")
         self._events.append(
             AgentRunProgressed(run_id=self.run_id, step=step, message=message)
         )
@@ -66,7 +67,7 @@ class AgentRun:
     def complete(self, result: dict[str, Any]) -> None:
         """标记运行成功完成。"""
         if self.status is not RunStatus.RUNNING:
-            raise ValueError(f"cannot complete run in status {self.status}")
+            raise ConflictError(f"cannot complete run in status {self.status}")
         self.status = RunStatus.COMPLETED
         self.result = result
         self._events.append(AgentRunCompleted(run_id=self.run_id, result=result))
@@ -74,7 +75,7 @@ class AgentRun:
     def fail(self, error: str) -> None:
         """标记运行失败。"""
         if self.status not in (RunStatus.CREATED, RunStatus.RUNNING):
-            raise ValueError(f"cannot fail run in status {self.status}")
+            raise ConflictError(f"cannot fail run in status {self.status}")
         self.status = RunStatus.FAILED
         self.error = error
         self._events.append(AgentRunFailed(run_id=self.run_id, error=error))

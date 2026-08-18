@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, status
 
 from application.agent.dto import StartAgentRunCommand
 from infrastructure import Container
@@ -39,8 +39,6 @@ def get_run(
 ) -> AgentRunResponse:
     """按 ID 查询运行状态。"""
     dto = container.agent_service.get(run_id)
-    if dto is None:
-        raise HTTPException(status_code=404, detail="run not found")
     return AgentRunResponse(
         run_id=dto.run_id,
         goal=dto.goal,
