@@ -57,6 +57,8 @@ export interface StreamEvent {
   step?: TaskStep
   role?: "user" | "assistant"
   message?: string
+  partial?: boolean
+  stream_id?: string
   title?: string
   error?: string
   reason?: string
@@ -124,6 +126,7 @@ export type TimelineItem =
       kind: "message"
       role: "user" | "assistant"
       content: string
+      partial?: boolean
       createdAt?: string
     }
   | {
@@ -174,4 +177,5 @@ export interface TaskUiState {
   waitReason: string | null
   error: string | null
   isStreaming: boolean
+  streamingMessageId: string | null
 }

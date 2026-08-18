@@ -2,12 +2,18 @@
 
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { useCallback, useState } from "react"
+import { useCallback } from "react"
 
+import { TaskStatusBadge } from "@/components/task/task-status-badge"
 import { removeTaskSession } from "@/lib/task-storage"
-import type { TaskSessionMeta, TaskStatus } from "@/lib/types"
-import { Badge } from "@workspace/ui/components/badge"
+import type { TaskSessionMeta } from "@/lib/types"
 import { Button } from "@workspace/ui/components/button"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@workspace/ui/components/dropdown-menu"
 import {
   Sidebar,
   SidebarContent,
@@ -17,21 +23,10 @@ import {
   SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
-  SidebarMenuAction,
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@workspace/ui/components/sidebar"
-import { cn } from "@workspace/ui/lib/utils"
-import { PlusIcon, SettingsIcon, Trash2Icon } from "lucide-react"
-
-const statusLabel: Record<TaskStatus, string> = {
-  created: "已创建",
-  running: "执行中",
-  waiting: "等待回复",
-  completed: "已完成",
-  failed: "失败",
-  cancelled: "已取消",
-}
+import { Bot, MoreHorizontal, Plus, Settings, Trash2 } from "lucide-react"
 
 interface TaskSidebarProps {
   sessions: TaskSessionMeta[]
@@ -59,52 +54,45 @@ export function TaskSidebar({
   )
 
   return (
-    <Sidebar collapsible="icon">
-      <SidebarHeader className="border-b border-border/60 p-3">
-        <div className="flex items-center justify-between gap-2">
-          <div className="min-w-0">
-            <p className="truncate text-sm font-semibold">XTAI Manus</p>
-            <p className="text-muted-foreground truncate text-xs">
-              自主智能体工作台
-            </p>
+    <Sidebar collapsible="offcanvas" className="border-r">
+      <SidebarHeader className="border-b px-3 py-3">
+        <div className="flex items-center gap-2 px-1">
+          <div className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+            <Bot className="size-4" />
           </div>
-          <Button
-            size="icon-sm"
-            variant="outline"
-            onClick={() => router.push("/")}
-            aria-label="新建任务"
-          >
-            <PlusIcon />
-          </Button>
+          <div>
+            <p className="text-sm font-semibold">XTAI Manus</p>
+            <p className="text-[11px] text-muted-foreground">LangGraph Agent</p>
+          </div>
         </div>
+        <Button
+          className="mt-3 w-full justify-start gap-2"
+          size="sm"
+          onClick={() => router.push("/")}
+        >
+          <Plus className="size-4" />
+          新建任务
+        </Button>
       </SidebarHeader>
 
       <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupLabel>任务历史</SidebarGroupLabel>
+          <SidebarGroupLabel>历史任务</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {sessions.length === 0 ? (
-                <p className="text-muted-foreground px-2 py-4 text-xs">
-                  暂无任务，从首页创建第一个目标。
+                <p className="px-3 py-2 text-xs text-muted-foreground">
+                  暂无历史，开始第一个任务吧
                 </p>
               ) : (
                 sessions.map((session) => (
-                  <SidebarMenuItem key={session.taskId}>
-                    <SidebarMenuButton
-                      isActive={session.taskId === activeTaskId}
-                      onClick={() => router.push(`/tasks/${session.taskId}`)}
-                    >
-                      <span className="truncate">{session.title}</span>
-                    </SidebarMenuButton>
-                    <SidebarMenuAction
-                      showOnHover
-                      onClick={() => handleDelete(session.taskId)}
-                      aria-label="删除任务记录"
-                    >
-                      <Trash2Icon />
-                    </SidebarMenuAction>
-                  </SidebarMenuItem>
+                  <SessionMenuItem
+                    key={session.taskId}
+                    session={session}
+                    isActive={session.taskId === activeTaskId}
+                    onSelect={() => router.push(`/tasks/${session.taskId}`)}
+                    onDelete={() => handleDelete(session.taskId)}
+                  />
                 ))
               )}
             </SidebarMenu>
@@ -112,38 +100,80 @@ export function TaskSidebar({
         </SidebarGroup>
       </SidebarContent>
 
-      <SidebarFooter className="border-t border-border/60 p-2">
+      <SidebarFooter className="space-y-2 border-t p-3">
         <Link href="/settings">
-          <Button variant="ghost" className="w-full justify-start">
-            <SettingsIcon />
+          <Button variant="ghost" className="w-full justify-start gap-2">
+            <Settings className="size-4" />
             设置
           </Button>
         </Link>
+        <p className="text-[10px] leading-relaxed text-muted-foreground">
+          按 <kbd className="rounded bg-muted px-1">D</kbd> 切换主题 ·{" "}
+          <kbd className="rounded bg-muted px-1">Ctrl+B</kbd> 切换侧栏
+        </p>
       </SidebarFooter>
     </Sidebar>
   )
 }
 
-/** 任务状态徽章 */
-export function TaskStatusBadge({
-  status,
-  className,
+function SessionMenuItem({
+  session,
+  isActive,
+  onSelect,
+  onDelete,
 }: {
-  status: TaskStatus
-  className?: string
+  session: TaskSessionMeta
+  isActive: boolean
+  onSelect: () => void
+  onDelete: () => void
 }) {
-  const variant =
-    status === "failed"
-      ? "destructive"
-      : status === "completed"
-        ? "secondary"
-        : status === "waiting"
-          ? "outline"
-          : "default"
-
   return (
-    <Badge variant={variant} className={cn("text-[10px]", className)}>
-      {statusLabel[status] ?? status}
-    </Badge>
+    <SidebarMenuItem>
+      <div className="flex w-full min-w-0 items-stretch gap-0.5">
+        <SidebarMenuButton
+          isActive={isActive}
+          onClick={onSelect}
+          className="h-auto min-h-9 min-w-0 flex-1 py-2"
+        >
+          <div className="flex min-w-0 flex-1 flex-col gap-1">
+            <span className="truncate text-left text-sm leading-none">
+              {session.title}
+            </span>
+            <TaskStatusBadge
+              status={session.status}
+              className="h-4 w-fit px-1.5 text-[9px]"
+            />
+          </div>
+        </SidebarMenuButton>
+
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                className="mt-1 shrink-0 text-muted-foreground opacity-70 hover:opacity-100"
+                onClick={(e) => e.stopPropagation()}
+                aria-label="任务操作"
+              >
+                <MoreHorizontal className="size-3.5" />
+              </Button>
+            }
+          />
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem
+              variant="destructive"
+              onClick={(e) => {
+                e.stopPropagation()
+                onDelete()
+              }}
+            >
+              <Trash2 className="size-3.5" />
+              删除
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+    </SidebarMenuItem>
   )
 }

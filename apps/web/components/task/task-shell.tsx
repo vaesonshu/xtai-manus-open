@@ -3,14 +3,14 @@
 import { useCallback, useEffect, useState } from "react"
 
 import { PlanStepsBar } from "@/components/task/plan-steps-bar"
-import { StatusBanner } from "@/components/task/status-banner"
 import { TaskComposer } from "@/components/task/task-composer"
 import { TaskHeader } from "@/components/task/task-header"
 import { TaskSidebar } from "@/components/task/task-sidebar"
-import { TaskTimeline, ToolPanel } from "@/components/task/task-timeline"
+import { TaskTimeline } from "@/components/task/task-timeline"
+import { ToolPanel } from "@/components/task/tool-panel"
 import { WelcomeScreen } from "@/components/task/welcome-screen"
 import { fetchHealth } from "@/lib/api-client"
-import type { HealthResponse } from "@/lib/types"
+import type { HealthResponse, ToolRecord } from "@/lib/types"
 import { useTaskSession } from "@/hooks/use-task-session"
 import {
   Sheet,
@@ -22,7 +22,8 @@ import { SidebarInset, SidebarProvider } from "@workspace/ui/components/sidebar"
 import { useIsMobile } from "@workspace/ui/hooks/use-mobile"
 import { cn } from "@workspace/ui/lib/utils"
 
-const TOOL_PANEL_WIDTH = "420px"
+/** 右侧工具工作区宽度（桌面端） */
+const TOOL_PANEL_WIDTH = "600px"
 
 interface TaskShellProps {
   taskId?: string | null
@@ -97,9 +98,17 @@ export function TaskShell({ taskId = null, onTaskCreated }: TaskShellProps) {
     [sendReply]
   )
 
-  const isWaiting = state.status === "waiting"
-  const canReply = Boolean(taskId) && isWaiting
+  const handleToolSelect = useCallback((tool: ToolRecord) => {
+    setSelectedToolId(tool.id)
+    setShowToolPanel(true)
+  }, [])
+
+  const canReply = Boolean(taskId) && state.status === "waiting"
   const showPlanBar = state.steps.length > 0 || Boolean(state.title)
+
+  const toolPanelContent = (
+    <ToolPanel tools={state.tools} focusedToolId={focusedToolId} />
+  )
 
   return (
     <SidebarProvider defaultOpen>
@@ -125,18 +134,11 @@ export function TaskShell({ taskId = null, onTaskCreated }: TaskShellProps) {
             ) : (
               <>
                 <div className="min-h-0 flex-1 overflow-hidden">
-                  <div className="space-y-3 px-4 pt-3">
-                    <StatusBanner state={state} />
-                  </div>
                   <TaskTimeline
-                    className="h-[calc(100%-0.5rem)]"
-                    timeline={state.timeline}
-                    isStreaming={state.isStreaming}
+                    className="h-full"
+                    state={state}
                     selectedToolId={focusedToolId}
-                    onToolSelect={(toolId) => {
-                      setSelectedToolId(toolId)
-                      setShowToolPanel(true)
-                    }}
+                    onToolSelect={handleToolSelect}
                   />
                 </div>
 
@@ -157,28 +159,44 @@ export function TaskShell({ taskId = null, onTaskCreated }: TaskShellProps) {
             )}
           </main>
 
-          {!isMobile && showToolPanel ? (
-            <div
-              className="hidden shrink-0 md:block"
-              style={{ width: TOOL_PANEL_WIDTH }}
+          {!isMobile && (
+            <aside
+              aria-hidden={!showToolPanel}
+              style={{ width: showToolPanel ? TOOL_PANEL_WIDTH : 0 }}
+              className={cn(
+                "hidden h-full min-h-0 shrink-0 overflow-hidden border-l bg-sidebar/30 transition-[width,border-color] duration-300 ease-in-out lg:flex",
+                showToolPanel ? "border-border" : "border-transparent"
+              )}
             >
-              <ToolPanel tools={state.tools} focusedToolId={focusedToolId} />
-            </div>
-          ) : null}
+              <div
+                className="h-full shrink-0"
+                style={{ width: TOOL_PANEL_WIDTH }}
+              >
+                <div
+                  className={cn(
+                    "h-full transition-opacity duration-200 ease-in-out",
+                    showToolPanel
+                      ? "opacity-100 delay-100"
+                      : "pointer-events-none opacity-0"
+                  )}
+                >
+                  {toolPanelContent}
+                </div>
+              </div>
+            </aside>
+          )}
         </div>
       </SidebarInset>
 
       {isMobile ? (
         <Sheet open={showToolPanel} onOpenChange={setShowToolPanel}>
-          <SheetContent side="right" className="w-full p-0 sm:max-w-md">
-            <SheetHeader className="border-b border-border/60 p-4">
-              <SheetTitle>工具工作区</SheetTitle>
+          <SheetContent side="right" className="w-full p-0 sm:max-w-2xl">
+            <SheetHeader className="border-b px-4 py-3">
+              <SheetTitle className="text-sm">工具工作区</SheetTitle>
             </SheetHeader>
-            <ToolPanel
-              tools={state.tools}
-              focusedToolId={focusedToolId}
-              className={cn("border-0")}
-            />
+            <div className="h-[calc(100%-3.5rem)] min-h-0 overflow-hidden">
+              {toolPanelContent}
+            </div>
           </SheetContent>
         </Sheet>
       ) : null}

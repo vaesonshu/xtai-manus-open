@@ -22,6 +22,7 @@ export const initialTaskUiState: TaskUiState = {
   waitReason: null,
   error: null,
   isStreaming: false,
+  streamingMessageId: null,
 }
 
 export type TaskAction =
@@ -133,15 +134,52 @@ function applyStreamEvent(
     case "message": {
       const content = event.message ?? ""
       const role = event.role ?? "assistant"
-      const messageId = event.id || `message-${state.timeline.length}`
+      const isPartial = Boolean(event.partial)
+      const streamId =
+        event.stream_id ?? state.streamingMessageId ?? event.id
+
+      if (role === "assistant" && isPartial) {
+        if (
+          state.streamingMessageId === streamId &&
+          state.timeline.some(
+            (item) =>
+              item.kind === "message" &&
+              item.id === streamId &&
+              item.content === content &&
+              item.partial
+          )
+        ) {
+          return state
+        }
+
+        return {
+          ...state,
+          streamingMessageId: streamId,
+          timeline: upsertTimelineItem(state.timeline, {
+            id: streamId,
+            kind: "message",
+            role: "assistant",
+            content,
+            partial: true,
+            createdAt,
+          }),
+        }
+      }
+
+      const messageId =
+        role === "assistant" && event.stream_id
+          ? event.stream_id
+          : event.id || `message-${state.timeline.length}`
 
       return {
         ...state,
+        streamingMessageId: null,
         timeline: upsertTimelineItem(state.timeline, {
           id: messageId,
           kind: "message",
           role,
           content,
+          partial: false,
           createdAt,
         }),
       }
@@ -173,6 +211,7 @@ function applyStreamEvent(
         ...state,
         status: "waiting",
         isStreaming: false,
+        streamingMessageId: null,
         waitQuestion: event.question ?? null,
         waitReason: event.reason ?? null,
         timeline: upsertTimelineItem(state.timeline, {
@@ -189,6 +228,7 @@ function applyStreamEvent(
         ...state,
         status: "failed",
         isStreaming: false,
+        streamingMessageId: null,
         error: event.error ?? "任务执行失败",
         timeline: upsertTimelineItem(state.timeline, {
           id: event.id,
@@ -205,6 +245,7 @@ function applyStreamEvent(
         status:
           state.status === "failed" ? "failed" : ("completed" as TaskStatus),
         isStreaming: false,
+        streamingMessageId: null,
         waitQuestion: null,
         waitReason: null,
       }

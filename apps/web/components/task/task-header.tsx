@@ -2,16 +2,11 @@
 
 import type { HealthResponse } from "@/lib/types"
 import type { TaskUiState } from "@/lib/types"
-import { TaskStatusBadge } from "@/components/task/task-sidebar"
-import { Badge } from "@workspace/ui/components/badge"
+import { TaskStatusBadge } from "@/components/task/task-status-badge"
 import { Button } from "@workspace/ui/components/button"
+import { Separator } from "@workspace/ui/components/separator"
 import { SidebarTrigger } from "@workspace/ui/components/sidebar"
-import { cn } from "@workspace/ui/lib/utils"
-import {
-  ActivityIcon,
-  PanelRightIcon,
-  RefreshCwIcon,
-} from "lucide-react"
+import { PanelRight, RefreshCw } from "lucide-react"
 
 interface TaskHeaderProps {
   state: Pick<TaskUiState, "title" | "goal" | "status" | "isStreaming">
@@ -21,7 +16,7 @@ interface TaskHeaderProps {
   onRefreshHealth: () => void
 }
 
-/** 顶栏：标题、状态、健康检查与工具面板开关 */
+/** 顶栏：任务标题 + 状态 + 面板切换 */
 export function TaskHeader({
   state,
   health,
@@ -29,61 +24,57 @@ export function TaskHeader({
   onToggleToolPanel,
   onRefreshHealth,
 }: TaskHeaderProps) {
-  const title = state.title || state.goal || "新任务"
+  const title = state.title || state.goal || "XTAI Manus"
 
   return (
-    <header className="flex h-14 shrink-0 items-center gap-2 border-b border-border/60 px-3">
-      <SidebarTrigger />
+    <header className="flex h-14 shrink-0 items-center gap-3 border-b px-4">
+      <SidebarTrigger className="-ml-1" aria-label="展开/收起侧栏" />
 
       <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <h1 className="truncate text-sm font-medium">{title}</h1>
-          <TaskStatusBadge status={state.status} />
-          {state.isStreaming ? (
-            <Badge variant="outline" className="text-[10px]">
-              流式接收中
-            </Badge>
-          ) : null}
+        <h2 className="truncate text-sm font-medium">{title}</h2>
+        <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+          <TaskStatusBadge
+            status={state.status}
+            className="h-4 px-1.5 text-[10px]"
+          />
+          {health?.service && (
+            <>
+              <span>·</span>
+              <span className="truncate">{health.service}</span>
+            </>
+          )}
+          {state.status === "waiting" && (
+            <span className="text-amber-600 dark:text-amber-400">· 等待回复</span>
+          )}
+          {state.isStreaming && state.status !== "waiting" && (
+            <span className="text-amber-600 dark:text-amber-400">
+              · 流式接收中
+            </span>
+          )}
         </div>
-        {state.goal && state.title ? (
-          <p className="text-muted-foreground truncate text-xs">
-            {state.goal}
-          </p>
-        ) : null}
       </div>
 
       <div className="flex items-center gap-1">
         <Button
-          type="button"
-          size="icon-sm"
           variant="ghost"
-          onClick={onRefreshHealth}
-          aria-label="刷新健康状态"
-        >
-          <RefreshCwIcon />
-        </Button>
-
-        <Badge
-          variant={health?.status === "ok" ? "secondary" : "outline"}
-          className={cn(
-            "hidden gap-1 sm:inline-flex",
-            health?.status !== "ok" && "text-amber-600"
-          )}
-        >
-          <ActivityIcon className="size-3" />
-          {health?.status === "ok" ? "服务正常" : "服务异常"}
-        </Badge>
-
-        <Button
-          type="button"
           size="icon-sm"
-          variant={showToolPanel ? "secondary" : "ghost"}
-          onClick={onToggleToolPanel}
-          aria-label="切换工具面板"
+          onClick={onRefreshHealth}
+          aria-label="刷新状态"
         >
-          <PanelRightIcon />
+          <RefreshCw className="size-3.5" />
+        </Button>
+        <Button
+          variant={showToolPanel ? "secondary" : "ghost"}
+          size="icon-sm"
+          onClick={onToggleToolPanel}
+          aria-label={showToolPanel ? "关闭工具工作区" : "打开工具工作区"}
+          aria-pressed={showToolPanel}
+        >
+          <PanelRight className="size-4" />
         </Button>
       </div>
+
+      <Separator orientation="vertical" className="hidden h-6 lg:block" />
     </header>
   )
 }

@@ -17,7 +17,7 @@ interface StatusBannerProps {
 export function StatusBanner({ state, className }: StatusBannerProps) {
   if (state.status === "waiting") {
     return (
-      <Alert className={cn("mx-auto max-w-3xl", className)}>
+      <Alert className={cn("mb-2", className)}>
         <MessageCircleIcon />
         <AlertTitle>等待你的回复</AlertTitle>
         <AlertDescription>
@@ -31,7 +31,7 @@ export function StatusBanner({ state, className }: StatusBannerProps) {
 
   if (state.status === "failed" && state.error) {
     return (
-      <Alert variant="destructive" className={cn("mx-auto max-w-3xl", className)}>
+      <Alert variant="destructive" className={cn("mb-2", className)}>
         <AlertCircleIcon />
         <AlertTitle>任务失败</AlertTitle>
         <AlertDescription>{state.error}</AlertDescription>
@@ -41,7 +41,7 @@ export function StatusBanner({ state, className }: StatusBannerProps) {
 
   if (state.status === "completed") {
     return (
-      <Alert className={cn("mx-auto max-w-3xl border-emerald-500/30", className)}>
+      <Alert className={cn("mb-2 border-emerald-500/30", className)}>
         <CheckCircle2Icon className="text-emerald-500" />
         <AlertTitle>任务已完成</AlertTitle>
         <AlertDescription>所有步骤已执行完毕。</AlertDescription>
