@@ -3,14 +3,25 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 
 from application.agent.prompts import EXECUTION_PROMPT
 from application.agent.react_executor import ReActExecutor
+from application.agent.step_result import StepExecutionResult, SummarizeResult
 from domain.event.base import StreamEvent
 from domain.task.identifiers import TaskId
 from domain.task.step import TaskStep
 
 OnEventCallback = Callable[[StreamEvent], Awaitable[None]]
+
+
+@dataclass(frozen=True)
+class StepExecutionContext:
+    """步骤执行上下文（对齐参考项目 message/attachments/language）。"""
+
+    message: str = ""
+    attachments: str = ""
+    language: str = "zh-CN"
 
 
 class StepExecutor:
@@ -24,10 +35,11 @@ class StepExecutor:
         *,
         task_id: TaskId,
         step: TaskStep,
+        context: StepExecutionContext | None = None,
         on_event: OnEventCallback | None = None,
         resume: bool = False,
-    ) -> str:
-        """执行单个规划步骤并返回文本结果。"""
+    ) -> StepExecutionResult:
+        """执行单个规划步骤并返回结构化结果。"""
         if resume:
             return await self._react.continue_after_user_input(
                 task_id=task_id,
@@ -35,9 +47,12 @@ class StepExecutor:
                 on_event=on_event,
             )
 
+        ctx = context or StepExecutionContext()
         query = EXECUTION_PROMPT.format(
-            step_description=step.description,
-            agent_role=step.agent_role.value,
+            step=step.description,
+            message=ctx.message,
+            attachments=ctx.attachments or "(无)",
+            language=ctx.language,
         )
         return await self._react.invoke(
             task_id=task_id,
@@ -45,6 +60,17 @@ class StepExecutor:
             query=query,
             on_event=on_event,
         )
+
+    async def summarize(
+        self,
+        *,
+        task_id: TaskId,
+        goal: str,
+        on_event: OnEventCallback | None = None,
+    ) -> SummarizeResult:
+        """任务完成后生成汇总交付。"""
+        del on_event
+        return await self._react.summarize(task_id=task_id, goal=goal)
 
 
 class OfflineStepExecutor:
@@ -55,8 +81,20 @@ class OfflineStepExecutor:
         *,
         task_id: TaskId,
         step: TaskStep,
+        context: StepExecutionContext | None = None,
         on_event: OnEventCallback | None = None,
         resume: bool = False,
-    ) -> str:
-        del task_id, on_event, resume
-        return f"[{step.agent_role.value}] 已完成：{step.description}"
+    ) -> StepExecutionResult:
+        del task_id, context, on_event, resume
+        text = f"[{step.agent_role.value}] 已完成：{step.description}"
+        return StepExecutionResult(success=True, result=text, raw_content=text)
+
+    async def summarize(
+        self,
+        *,
+        task_id: TaskId,
+        goal: str,
+        on_event: OnEventCallback | None = None,
+    ) -> SummarizeResult:
+        del task_id, on_event
+        return SummarizeResult(message=f"任务「{goal}」已完成（离线模式）。")

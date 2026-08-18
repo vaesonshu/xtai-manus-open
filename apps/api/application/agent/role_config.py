@@ -4,12 +4,29 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from application.agent.prompts import JSON_RESPONSE_FORMAT, REACT_SYSTEM_PROMPT
 from domain.agent.role import AgentRole
 
-_BASE_SYSTEM = (
-    "你是一个多 Agent 协作系统中的执行智能体。"
-    "请根据当前步骤描述完成任务，必要时调用工具。"
+_BASE_SYSTEM = REACT_SYSTEM_PROMPT
+
+_INTERACTION_TOOLS = ("message_notify_user", "message_ask_user")
+_RESEARCHER_TOOLS = _INTERACTION_TOOLS + (
+    "search_web",
+    "read_file",
+    "find_files",
+    "browser_view",
+    "browser_navigate",
 )
+_CODER_TOOLS = _INTERACTION_TOOLS + (
+    "read_file",
+    "write_file",
+    "replace_in_file",
+    "search_in_file",
+    "find_files",
+    "shell_execute",
+    "shell_read_output",
+)
+_EXECUTOR_TOOLS = _CODER_TOOLS + ("search_web", "echo")
 
 
 @dataclass(frozen=True)
@@ -24,25 +41,30 @@ class RoleConfig:
 
 ROLE_CONFIG: dict[AgentRole, RoleConfig] = {
     AgentRole.RESEARCHER: RoleConfig(
-        system_prompt=_BASE_SYSTEM + "你擅长信息收集与调研，可使用 echo 工具验证流程。",
-        tool_names=("echo", "message_ask_user"),
+        system_prompt=_BASE_SYSTEM + "你擅长信息收集与调研，优先使用搜索与文件工具。",
+        tool_names=_RESEARCHER_TOOLS,
+        response_format=JSON_RESPONSE_FORMAT,
     ),
     AgentRole.CODER: RoleConfig(
-        system_prompt=_BASE_SYSTEM + "你擅长整理方案与生成可交付内容。",
-        tool_names=("echo", "message_ask_user"),
+        system_prompt=_BASE_SYSTEM + "你擅长整理方案与生成可交付内容，可使用文件与 Shell 工具。",
+        tool_names=_CODER_TOOLS,
+        response_format=JSON_RESPONSE_FORMAT,
     ),
     AgentRole.REVIEWER: RoleConfig(
         system_prompt=_BASE_SYSTEM + "你负责复核质量与完整性，输出简明结论。",
-        tool_names=(),
+        tool_names=_INTERACTION_TOOLS,
+        response_format=JSON_RESPONSE_FORMAT,
         tool_choice="none",
     ),
     AgentRole.EXECUTOR: RoleConfig(
         system_prompt=_BASE_SYSTEM,
-        tool_names=("echo",),
+        tool_names=_EXECUTOR_TOOLS,
+        response_format=JSON_RESPONSE_FORMAT,
     ),
     AgentRole.COORDINATOR: RoleConfig(
         system_prompt=_BASE_SYSTEM,
-        tool_names=(),
+        tool_names=_INTERACTION_TOOLS,
+        response_format=JSON_RESPONSE_FORMAT,
         tool_choice="none",
     ),
     AgentRole.PLANNER: RoleConfig(

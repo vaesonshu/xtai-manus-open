@@ -7,6 +7,7 @@ import asyncio
 import pytest
 from fakeredis import FakeAsyncRedis
 
+from application.agent.step_result import StepExecutionResult, SummarizeResult
 from application.memory.service import MemoryApplicationService
 from application.planning.service import PlanningApplicationService
 from application.task.agent_task_runner import AgentTaskRunner
@@ -34,12 +35,14 @@ class WaitingStepExecutor:
         task_id: TaskId,
         step: TaskStep,
         on_event=None,
+        context=None,
         resume: bool = False,
-    ) -> str:
-        del task_id, on_event
+    ) -> StepExecutionResult:
+        del task_id, on_event, context
         if resume:
             self._resume_calls += 1
-            return f"[{step.agent_role.value}] 用户已回复，步骤完成。"
+            text = f"[{step.agent_role.value}] 用户已回复，步骤完成。"
+            return StepExecutionResult(success=True, result=text, raw_content=text)
         if not self._waited_once:
             self._waited_once = True
             raise WaitForUserInputError(
@@ -47,7 +50,12 @@ class WaitingStepExecutor:
                 agent_role=step.agent_role,
                 question="请确认是否继续？",
             )
-        return f"[{step.agent_role.value}] 已完成：{step.description}"
+        text = f"[{step.agent_role.value}] 已完成：{step.description}"
+        return StepExecutionResult(success=True, result=text, raw_content=text)
+
+    async def summarize(self, *, task_id: TaskId, goal: str, on_event=None) -> SummarizeResult:
+        del task_id, on_event
+        return SummarizeResult(message=f"任务「{goal}」已完成。")
 
 
 @pytest.fixture

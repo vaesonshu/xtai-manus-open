@@ -40,7 +40,9 @@ def _serialize_step(step: TaskStep) -> dict[str, Any]:
         "description": step.description,
         "agent_role": step.agent_role.value,
         "status": step.status.value,
+        "success": step.success,
         "result": step.result,
+        "attachments": list(step.attachments),
         "error": step.error,
     }
 

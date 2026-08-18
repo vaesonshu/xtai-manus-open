@@ -144,10 +144,16 @@ class AgentTask:
         )
         return added
 
-    def complete_current_step(self, result: str) -> TaskStep:
+    def complete_current_step(
+        self,
+        result: str,
+        *,
+        success: bool = True,
+        attachments: tuple[str, ...] = (),
+    ) -> TaskStep:
         """完成当前运行中的步骤。"""
         step = self._require_running_step()
-        step.complete(result)
+        step.complete(result, success=success, attachments=attachments)
         self._events.append(
             TaskStepCompleted(
                 task_id=self.task_id,

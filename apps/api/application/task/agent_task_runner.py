@@ -6,7 +6,12 @@ import logging
 
 from application.memory.service import MemoryApplicationService
 from application.planning.service import PlanningApplicationService
-from application.agent.step_executor import OfflineStepExecutor, StepExecutor
+from application.agent.step_executor import (
+    OfflineStepExecutor,
+    StepExecutionContext,
+    StepExecutor,
+)
+from application.agent.step_result import StepExecutionResult
 from domain.agent.role import AgentRole
 from domain.event import (
     assistant_message,
@@ -144,6 +149,7 @@ class AgentTaskRunner:
                 step,
                 execution,
                 resume=True,
+                user_message=agent_task.goal,
             )
         except WaitForUserInputError as exc:
             await self._handle_wait_for_user(execution, agent_task, exc)
@@ -172,7 +178,12 @@ class AgentTaskRunner:
                 await self._emit(execution, step_started(step))
 
             try:
-                result = await self._execute_step(task_id, step, execution)
+                result = await self._execute_step(
+                    task_id,
+                    step,
+                    execution,
+                    user_message=goal,
+                )
             except WaitForUserInputError as exc:
                 await self._handle_wait_for_user(execution, agent_task, exc)
                 return
@@ -196,11 +207,13 @@ class AgentTaskRunner:
                 if agent_task.plan is not None:
                     await self._emit(execution, plan_updated(agent_task.plan))
 
+        summary_payload = await self._summarize_and_emit(execution, task_id, goal)
         agent_task.complete(
             result={
                 "goal": goal,
                 "plan_versions": len(agent_task.plan_history),
                 "steps_total": len(agent_task.plan.steps) if agent_task.plan else 0,
+                **summary_payload,
             }
         )
         self._tasks.save(agent_task)
@@ -214,27 +227,32 @@ class AgentTaskRunner:
         agent_task: AgentTask,
         task_id: TaskId,
         step: TaskStep,
-        result: str,
+        result: StepExecutionResult,
     ) -> None:
         """步骤成功后的记忆写入与事件推送。"""
-        agent_task.complete_current_step(result)
+        agent_task.complete_current_step(
+            result.display_text,
+            success=result.success,
+            attachments=result.attachments,
+        )
 
         self._memory.add_agent_message(
             task_id,
             step.agent_role,
-            {"role": "assistant", "content": result},
+            {"role": "assistant", "content": result.display_text},
         )
         self._memory.record(
             task_id,
             kind=MemoryKind.WORKING,
-            content=result,
+            content=result.display_text,
             agent_role=step.agent_role,
         )
         self._memory.compact_conversations(task_id)
         self._tasks.save(agent_task)
 
         await self._emit(execution, step_completed(step))
-        await self._emit(execution, assistant_message(result))
+        if result.display_text:
+            await self._emit(execution, assistant_message(result.display_text))
 
     async def _handle_wait_for_user(
         self,
@@ -296,7 +314,8 @@ class AgentTaskRunner:
         execution: TaskExecutionPort,
         *,
         resume: bool = False,
-    ) -> str:
+        user_message: str = "",
+    ) -> StepExecutionResult:
         """执行单步：委托 StepExecutor / ReActExecutor，并转发工具等事件。"""
 
         async def on_event(event: StreamEvent) -> None:
@@ -305,9 +324,32 @@ class AgentTaskRunner:
         return await self._step_executor.execute(
             task_id=task_id,
             step=step,
+            context=StepExecutionContext(message=user_message),
             on_event=on_event,
             resume=resume,
         )
+
+    async def _summarize_and_emit(
+        self,
+        execution: TaskExecutionPort,
+        task_id: TaskId,
+        goal: str,
+    ) -> dict[str, object]:
+        """任务结束时生成汇总并推送助手消息。"""
+        summarize = getattr(self._step_executor, "summarize", None)
+        if summarize is None:
+            return {}
+        try:
+            summary = await summarize(task_id=task_id, goal=goal)
+        except Exception:  # noqa: BLE001
+            logger.exception("任务汇总失败，跳过 summarize")
+            return {}
+        if summary.message:
+            await self._emit(execution, assistant_message(summary.message))
+        return {
+            "summary": summary.message,
+            "attachments": list(summary.attachments),
+        }
 
     @staticmethod
     def _get_running_step(agent_task: AgentTask) -> TaskStep | None:

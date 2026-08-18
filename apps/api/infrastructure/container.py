@@ -25,7 +25,11 @@ from domain.ports import (
     LlmConfigRepository,
     LlmRuntimePort,
 )
+from infrastructure.browser.stub_browser import StubBrowser
+from infrastructure.json.repair_json_parser import RepairJsonParser
 from infrastructure.memory.in_memory_repository import InMemoryMemoryStoreRepository
+from infrastructure.sandbox.local_sandbox import LocalSandbox
+from infrastructure.search.mock_search_engine import MockSearchEngine
 from infrastructure.cache import NullCache, RedisCache
 from infrastructure.config import Settings
 from infrastructure.events import InMemoryEventBus
@@ -41,7 +45,11 @@ from infrastructure.persistence.postgres_memory_repository import PostgresMemory
 from infrastructure.persistence.postgres_repository import PostgresAgentRunRepository
 from infrastructure.persistence.repository import InMemoryAgentRunRepository
 from infrastructure.tools import ToolRegistry, build_mock_toolkit
+from infrastructure.tools.browser_toolkit import build_browser_toolkit
+from infrastructure.tools.file_toolkit import build_file_toolkit
 from infrastructure.tools.interaction_toolkit import build_interaction_toolkit
+from infrastructure.tools.search_toolkit import build_search_toolkit
+from infrastructure.tools.shell_toolkit import build_shell_toolkit
 
 logger = logging.getLogger(__name__)
 
@@ -95,13 +103,25 @@ class Container:
         self.task_repository = InMemoryTaskRepository()
         self.task_service = TaskApplicationService(self.task_repository)
 
+        sandbox = LocalSandbox(f"{settings.data_dir}/sandbox")
+        search_engine = MockSearchEngine()
+        browser = StubBrowser()
+        json_parser = RepairJsonParser()
         tool_registry = ToolRegistry(
-            [build_mock_toolkit(), build_interaction_toolkit()]
+            [
+                build_mock_toolkit(),
+                build_interaction_toolkit(),
+                build_shell_toolkit(sandbox),
+                build_file_toolkit(sandbox),
+                build_search_toolkit(search_engine),
+                build_browser_toolkit(browser),
+            ]
         )
         react_executor = ReActExecutor(
             llm_runtime=self.llm_runtime,
             memory_service=self.memory_service,
             tool_registry=tool_registry,
+            json_parser=json_parser,
             config=AgentExecutionConfig(),
         )
         step_executor = StepExecutor(react_executor)

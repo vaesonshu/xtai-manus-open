@@ -21,6 +21,7 @@ class TaskStep:
     description: str
     agent_role: AgentRole = AgentRole.EXECUTOR
     status: ExecutionStatus = ExecutionStatus.PENDING
+    success: bool | None = None
     result: str | None = None
     error: str | None = None
     attachments: tuple[str, ...] = field(default_factory=tuple)
@@ -57,12 +58,20 @@ class TaskStep:
             raise ConflictError(f"cannot start step in status {self.status}")
         self.status = ExecutionStatus.RUNNING
 
-    def complete(self, result: str) -> None:
+    def complete(
+        self,
+        result: str,
+        *,
+        success: bool = True,
+        attachments: tuple[str, ...] = (),
+    ) -> None:
         """标记步骤成功完成。"""
         if self.status is not ExecutionStatus.RUNNING:
             raise ConflictError(f"cannot complete step in status {self.status}")
         self.status = ExecutionStatus.COMPLETED
+        self.success = success
         self.result = result
+        self.attachments = attachments
 
     def fail(self, error: str) -> None:
         """标记步骤失败。"""
