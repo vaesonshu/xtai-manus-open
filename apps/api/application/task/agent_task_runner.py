@@ -6,6 +6,7 @@ import logging
 
 from application.memory.service import MemoryApplicationService
 from application.planning.service import PlanningApplicationService
+from application.agent.step_executor import OfflineStepExecutor, StepExecutor
 from domain.agent.role import AgentRole
 from domain.event import (
     assistant_message,
@@ -23,9 +24,12 @@ from domain.planning.step_spec import PlanStepSpec
 from domain.ports.task import TaskRepository
 from domain.task.identifiers import TaskId
 from domain.task.ports import TaskExecutionPort
+from domain.task.step import TaskStep
 from domain.task.task import AgentTask
 
 logger = logging.getLogger(__name__)
+
+StepExecutorLike = StepExecutor | OfflineStepExecutor
 
 
 class AgentTaskRunner:
@@ -37,12 +41,14 @@ class AgentTaskRunner:
         memory_service: MemoryApplicationService,
         planning_service: PlanningApplicationService,
         task_repository: TaskRepository,
+        step_executor: StepExecutorLike | None = None,
         use_llm_planning: bool = False,
         replan_after_each_step: bool = True,
     ) -> None:
         self._memory = memory_service
         self._planning = planning_service
         self._tasks = task_repository
+        self._step_executor = step_executor or OfflineStepExecutor()
         self._use_llm_planning = use_llm_planning
         self._replan_after_each_step = replan_after_each_step
 
@@ -82,7 +88,7 @@ class AgentTaskRunner:
             step = agent_task.begin_next_step()
             await self._emit(execution, step_started(step))
 
-            result = self._execute_step(step)
+            result = await self._execute_step(task_id, step, execution)
             agent_task.complete_current_step(result)
 
             self._memory.add_agent_message(
@@ -168,10 +174,22 @@ class AgentTaskRunner:
             ],
         )
 
-    @staticmethod
-    def _execute_step(step) -> str:
-        """执行单步（当前为占位实现，后续接入 LLM / 工具）。"""
-        return f"[{step.agent_role.value}] 已完成：{step.description}"
+    async def _execute_step(
+        self,
+        task_id: TaskId,
+        step: TaskStep,
+        execution: TaskExecutionPort,
+    ) -> str:
+        """执行单步：委托 StepExecutor / ReActExecutor，并转发工具等事件。"""
+
+        async def on_event(event: StreamEvent) -> None:
+            await self._emit(execution, event)
+
+        return await self._step_executor.execute(
+            task_id=task_id,
+            step=step,
+            on_event=on_event,
+        )
 
     @staticmethod
     async def _emit(execution: TaskExecutionPort, event: StreamEvent) -> None:

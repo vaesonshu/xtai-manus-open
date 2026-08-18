@@ -9,6 +9,7 @@ from fakeredis import FakeAsyncRedis
 
 from application.memory.service import MemoryApplicationService
 from application.planning.service import PlanningApplicationService
+from application.agent.step_executor import OfflineStepExecutor
 from application.task.agent_task_runner import AgentTaskRunner
 from domain.agent.role import AgentRole
 from domain.task import TaskStatus
@@ -34,6 +35,7 @@ async def test_agent_task_runner_full_loop(fake_async_redis: FakeAsyncRedis) -> 
         memory_service=memory_service,
         planning_service=planning_service,
         task_repository=task_repo,
+        step_executor=OfflineStepExecutor(),
         replan_after_each_step=False,
     )
 

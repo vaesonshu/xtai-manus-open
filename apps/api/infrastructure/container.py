@@ -14,6 +14,9 @@ from application.llm.service import LlmConfigApplicationService
 from application.memory.service import MemoryApplicationService
 from application.planning.service import PlanningApplicationService
 from application.task.agent_task_runner import AgentTaskRunner
+from application.agent.config import AgentExecutionConfig
+from application.agent.react_executor import ReActExecutor
+from application.agent.step_executor import StepExecutor
 from application.task.service import TaskApplicationService
 from domain.ports import (
     AgentRunRepository,
@@ -36,6 +39,7 @@ from infrastructure.persistence.llm_config_repository import PostgresLlmConfigRe
 from infrastructure.persistence.in_memory_task_repository import InMemoryTaskRepository
 from infrastructure.persistence.postgres_repository import PostgresAgentRunRepository
 from infrastructure.persistence.repository import InMemoryAgentRunRepository
+from infrastructure.tools import MockToolKit, ToolRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -88,10 +92,20 @@ class Container:
         )
         self.task_repository = InMemoryTaskRepository()
         self.task_service = TaskApplicationService(self.task_repository)
+
+        tool_registry = ToolRegistry([MockToolKit()])
+        react_executor = ReActExecutor(
+            llm_runtime=self.llm_runtime,
+            memory_service=self.memory_service,
+            tool_registry=tool_registry,
+            config=AgentExecutionConfig(),
+        )
+        step_executor = StepExecutor(react_executor)
         self.agent_task_runner = AgentTaskRunner(
             memory_service=self.memory_service,
             planning_service=self.planning_service,
             task_repository=self.task_repository,
+            step_executor=step_executor,
         )
 
     def cache_health(self) -> str:
