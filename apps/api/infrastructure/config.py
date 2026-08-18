@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from functools import lru_cache
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from pydantic import BeforeValidator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -52,9 +52,17 @@ class Settings(BaseSettings):
 
     # LangGraph
     checkpoint_db_path: str = "./data/checkpoints.db"
+    # checkpoint 后端：auto（DB 开则用 postgres，否则 sqlite）| memory | sqlite | postgres
+    checkpoint_backend: Literal["auto", "memory", "sqlite", "postgres"] = "auto"
     agent_max_iterations: int = 30
+    # 编排引擎：react（应用层循环）| langgraph（StateGraph）
+    agent_orchestrator: Literal["react", "langgraph"] = "langgraph"
     # 是否调用 LLM 做在线规划（False 时使用离线三步规划）
     agent_use_llm_planning: bool = True
+    # LangGraph 可观测性：结构化日志 / 可选 OpenTelemetry span
+    langgraph_tracing_enabled: bool = True
+    # 多实例部署：启用 Redis 任务执行注册表（与 Postgres checkpoint 配合断点续跑）
+    langgraph_redis_execution: bool = True
 
     # Storage
     data_dir: str = "./data"
@@ -67,7 +75,8 @@ class Settings(BaseSettings):
 
     # PostgreSQL 业务数据库
     database_enabled: bool = True
-    database_url: str = "postgresql+psycopg://postgres:postgres@localhost:5432/xtai"
+    # 默认 5433：对应 docker-compose 宿主机端口，避开本机 PostgreSQL 5432
+    database_url: str = "postgresql+psycopg://postgres:postgres@localhost:5433/xtai"
     database_echo: bool = False
 
     # Logging

@@ -13,7 +13,6 @@ from fastapi.testclient import TestClient
 from application.agent.step_executor import OfflineStepExecutor
 from application.memory.service import MemoryApplicationService
 from application.planning.service import PlanningApplicationService
-from application.task.agent_task_runner import AgentTaskRunner
 from application.task.execution_service import TaskExecutionApplicationService
 from application.task.service import TaskApplicationService
 from domain.task import TaskStatus
@@ -30,11 +29,13 @@ from tests.test_planning_service import FakeLlmRuntime
 
 
 def _build_test_container(*, offline: bool = True) -> Container:
-    """构建使用内存队列与可选离线执行器的测试容器。"""
+    """构建使用内存队列与 LangGraph 离线执行器的测试容器。"""
     settings = Settings(
         redis_enabled=False,
         database_enabled=False,
         agent_use_llm_planning=False,
+        agent_orchestrator="langgraph",
+        checkpoint_db_path=":memory:",
     )
     container = build_container(settings)
 
@@ -42,20 +43,23 @@ def _build_test_container(*, offline: bool = True) -> Container:
     memory_service = MemoryApplicationService(memory_repo)
     planning_service = PlanningApplicationService(FakeLlmRuntime(), memory_service)
     task_repo = InMemoryTaskRepository()
-    step_executor = OfflineStepExecutor() if offline else container.agent_task_runner._step_executor  # noqa: SLF001
+    step_executor = OfflineStepExecutor() if offline else container.agent_task_runner  # noqa: SLF001
 
     container.memory_repository = memory_repo
     container.memory_service = memory_service
     container.planning_service = planning_service
     container.task_repository = task_repo
     container.task_service = TaskApplicationService(task_repo)
-    container.agent_task_runner = AgentTaskRunner(
-        memory_service=memory_service,
-        planning_service=planning_service,
-        task_repository=task_repo,
-        step_executor=step_executor,
-        replan_after_each_step=False,
-    )
+
+    if offline:
+        container.agent_task_runner = container._build_task_runner(  # noqa: SLF001
+            settings=settings,
+            memory_service=memory_service,
+            planning_service=planning_service,
+            task_repository=task_repo,
+            step_executor=OfflineStepExecutor(),
+        )
+
     container.task_execution_factory = TaskExecutionFactory(use_redis=False)
     container.task_execution_service = TaskExecutionApplicationService(
         task_runner=container.agent_task_runner,

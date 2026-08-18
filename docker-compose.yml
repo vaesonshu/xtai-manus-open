@@ -25,8 +25,9 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: xtai
+    # 宿主机用 5433，避免与 Windows/macOS 本机 PostgreSQL（默认 5432）冲突
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:

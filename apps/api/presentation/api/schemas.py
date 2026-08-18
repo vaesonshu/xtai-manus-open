@@ -31,6 +31,8 @@ class HealthResponse(BaseModel):
     env: str
     redis: str = "disabled"
     database: str = "disabled"
+    checkpoint: str = "disabled"
+    orchestrator: str = "unknown"
 
 
 class ErrorDetail(BaseModel):

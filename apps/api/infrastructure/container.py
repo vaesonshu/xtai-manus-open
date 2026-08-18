@@ -26,6 +26,8 @@ from domain.ports import (
     LlmConfigRepository,
     LlmRuntimePort,
 )
+from domain.task.ports import TaskRunnerPort
+from langgraph.graph.state import CompiledStateGraph
 from infrastructure.browser.stub_browser import StubBrowser
 from infrastructure.json.repair_json_parser import RepairJsonParser
 from infrastructure.memory.in_memory_repository import InMemoryMemoryStoreRepository
@@ -52,6 +54,11 @@ from infrastructure.tools.interaction_toolkit import build_interaction_toolkit
 from infrastructure.tools.search_toolkit import build_search_toolkit
 from infrastructure.tools.shell_toolkit import build_shell_toolkit
 from infrastructure.task.task_execution_factory import TaskExecutionFactory
+from infrastructure.langgraph.dependencies import GraphNodeDependencies
+from infrastructure.langgraph.event_emitter import GraphEventEmitter
+from infrastructure.langgraph.graph import build_agent_graph
+from infrastructure.langgraph.task_runner import LangGraphTaskRunner
+from infrastructure.persistence.checkpointer import get_checkpointer_for_settings
 
 logger = logging.getLogger(__name__)
 
@@ -104,6 +111,7 @@ class Container:
         )
         self.task_repository = InMemoryTaskRepository()
         self.task_service = TaskApplicationService(self.task_repository)
+        self.agent_graph: CompiledStateGraph | None = None
 
         sandbox = LocalSandbox(f"{settings.data_dir}/sandbox")
         search_engine = MockSearchEngine()
@@ -127,21 +135,70 @@ class Container:
             config=AgentExecutionConfig(),
         )
         step_executor = StepExecutor(react_executor)
-        self.agent_task_runner = AgentTaskRunner(
+        self.agent_task_runner: TaskRunnerPort = self._build_task_runner(
+            settings=settings,
             memory_service=self.memory_service,
             planning_service=self.planning_service,
             task_repository=self.task_repository,
             step_executor=step_executor,
-            use_llm_planning=settings.agent_use_llm_planning,
-            replan_after_each_step=settings.agent_use_llm_planning,
+        )
+        use_redis = settings.redis_enabled and (
+            settings.agent_orchestrator != "langgraph"
+            or settings.langgraph_redis_execution
         )
         self.task_execution_factory = TaskExecutionFactory(
-            use_redis=settings.redis_enabled,
+            use_redis=use_redis,
         )
         self.task_execution_service = TaskExecutionApplicationService(
             task_runner=self.agent_task_runner,
             task_service=self.task_service,
             execution_factory=self.task_execution_factory,
+        )
+
+    def _build_task_runner(
+        self,
+        *,
+        settings: Settings,
+        memory_service: MemoryApplicationService,
+        planning_service: PlanningApplicationService,
+        task_repository: InMemoryTaskRepository,
+        step_executor: StepExecutor,
+    ) -> TaskRunnerPort:
+        """按配置选择应用层循环或 LangGraph 编排。"""
+        self.agent_graph = None
+        if settings.agent_orchestrator == "langgraph":
+            emitter = GraphEventEmitter()
+            node_deps = GraphNodeDependencies(
+                planning_service=planning_service,
+                memory_service=memory_service,
+                step_executor=step_executor,
+                task_repository=task_repository,
+                settings=settings,
+            )
+            checkpointer = get_checkpointer_for_settings(settings)
+            graph = build_agent_graph(
+                settings,
+                node_deps=node_deps,
+                emitter=emitter,
+                checkpointer=checkpointer,
+            )
+            self.agent_graph = graph
+            return LangGraphTaskRunner(
+                graph=graph,
+                memory_service=memory_service,
+                task_repository=task_repository,
+                event_emitter=emitter,
+                checkpointer=checkpointer,
+                settings=settings,
+            )
+
+        return AgentTaskRunner(
+            memory_service=memory_service,
+            planning_service=planning_service,
+            task_repository=task_repository,
+            step_executor=step_executor,
+            use_llm_planning=settings.agent_use_llm_planning,
+            replan_after_each_step=settings.agent_use_llm_planning,
         )
 
     def cache_health(self) -> str:

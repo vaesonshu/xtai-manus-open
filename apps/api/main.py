@@ -11,6 +11,10 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from infrastructure import get_settings
 from infrastructure.logging_ import setup_logging
+from infrastructure.persistence.checkpointer import (
+    close_checkpointer,
+    init_checkpointer_for_settings,
+)
 from presentation.api.routes import api_router
 from presentation.deps import get_container
 from presentation.exception_handlers import register_exception_handlers
@@ -22,6 +26,8 @@ logger = logging.getLogger(__name__)
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     """应用生命周期：启动日志与资源释放。"""
     settings = get_settings()
+    if settings.agent_orchestrator == "langgraph":
+        await init_checkpointer_for_settings(settings)
     logger.info("服务启动完成 (env=%s, level=%s)", settings.app_env, settings.log_level)
     if settings.redis_enabled:
         from infrastructure.redis.async_client import get_async_redis
@@ -29,6 +35,8 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         await get_async_redis().init()
     yield
     get_container().close()
+    if settings.agent_orchestrator == "langgraph":
+        await close_checkpointer(settings)
     if settings.redis_enabled:
         from infrastructure.redis.async_client import get_async_redis
 

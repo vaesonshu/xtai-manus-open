@@ -85,11 +85,7 @@ presentation ──▶ application ──▶ domain ◀── infrastructure
   → 全部完成后 summarize 并推送 done
 ```
 
-更完整的链路说明可参考项目讨论中的流程分析，或直接阅读：
-
-- `application/task/agent_task_runner.py`
-- `application/agent/react_executor.py`
-- `presentation/api/routes/tasks.py`
+更完整的链路说明见 [`docs/execution-flow.md`](docs/execution-flow.md) 与 [`docs/langgraph-integration.md`](docs/langgraph-integration.md)。
 
 ---
 
@@ -120,7 +116,7 @@ docker compose up -d
 | 服务 | 地址 |
 | --- | --- |
 | Redis | `redis://localhost:6379/0` |
-| PostgreSQL | `postgresql+psycopg://postgres:postgres@localhost:5432/xtai` |
+| PostgreSQL | `postgresql+psycopg://postgres:postgres@localhost:5433/xtai` |
 
 ### 3. 配置并启动后端
 
@@ -136,7 +132,7 @@ LLM_MODEL=gpt-4o-mini
 REDIS_ENABLED=true
 REDIS_URL=redis://localhost:6379/0
 DATABASE_ENABLED=true
-DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5432/xtai
+DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5433/xtai
 AGENT_USE_LLM_PLANNING=true
 EOF
 

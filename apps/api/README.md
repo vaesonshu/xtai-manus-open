@@ -132,7 +132,9 @@ docker compose down -v
 | 服务 | 地址 |
 | --- | --- |
 | Redis | `redis://localhost:6379/0` |
-| PostgreSQL | `postgresql+psycopg://postgres:postgres@localhost:5432/xtai` |
+| PostgreSQL | `postgresql+psycopg://postgres:postgres@localhost:5433/xtai` |
+
+> **Windows 注意**：若本机已安装 PostgreSQL（默认占用 5432），Compose 将容器映射到宿主机 **5433**，避免端口冲突。若 `alembic` 报「数据库 xtai 不存在」，请检查 `.env` 中 `DATABASE_URL` 端口是否为 `5433`。
 
 若修改了 Compose 中的端口或账号，请同步更新 `.env` 中的 `REDIS_URL` 与 `DATABASE_URL`。
 
@@ -171,7 +173,7 @@ docker run -d \
   -e POSTGRES_USER=postgres \
   -e POSTGRES_PASSWORD=postgres \
   -e POSTGRES_DB=xtai \
-  -p 5432:5432 \
+  -p 5433:5432 \
   postgres:16-alpine
 ```
 
@@ -194,7 +196,7 @@ docker exec -it xtai-postgres psql -U postgres -d xtai -c "\dt"
 | 配置项 | 默认值 | 说明 |
 | --- | --- | --- |
 | `DATABASE_ENABLED` | `true` | 是否启用 PostgreSQL |
-| `DATABASE_URL` | `postgresql+psycopg://postgres:postgres@localhost:5432/xtai` | 数据库连接串 |
+| `DATABASE_URL` | `postgresql+psycopg://postgres:postgres@localhost:5433/xtai` | 数据库连接串 |
 | `DATABASE_ECHO` | `false` | 是否打印 SQL 日志 |
 
 设为 `DATABASE_ENABLED=false` 时，业务数据将回退到内存仓库（仅适合本地快速调试）。
