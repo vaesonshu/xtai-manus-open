@@ -11,6 +11,10 @@ import logging
 from application.agent.service import AgentApplicationService
 from application.llm.invoke_service import LlmInvokeApplicationService
 from application.llm.service import LlmConfigApplicationService
+from application.memory.service import MemoryApplicationService
+from application.planning.service import PlanningApplicationService
+from application.task.agent_task_runner import AgentTaskRunner
+from application.task.service import TaskApplicationService
 from domain.ports import (
     AgentRunRepository,
     CachePort,
@@ -18,6 +22,7 @@ from domain.ports import (
     LlmConfigRepository,
     LlmRuntimePort,
 )
+from infrastructure.memory.in_memory_repository import InMemoryMemoryStoreRepository
 from infrastructure.cache import NullCache, RedisCache
 from infrastructure.config import Settings
 from infrastructure.events import InMemoryEventBus
@@ -28,6 +33,7 @@ from infrastructure.llm.runtime import LlmRuntime
 from infrastructure.persistence.caching_repository import CachingAgentRunRepository
 from infrastructure.persistence.database import Database
 from infrastructure.persistence.llm_config_repository import PostgresLlmConfigRepository
+from infrastructure.persistence.in_memory_task_repository import InMemoryTaskRepository
 from infrastructure.persistence.postgres_repository import PostgresAgentRunRepository
 from infrastructure.persistence.repository import InMemoryAgentRunRepository
 
@@ -72,6 +78,21 @@ class Container:
             default_config_factory=lambda: llm_config_from_settings(settings),
         )
         self.llm_invoke_service = LlmInvokeApplicationService(runtime=self.llm_runtime)
+
+        # 记忆与多 Agent 规划
+        self.memory_repository = InMemoryMemoryStoreRepository()
+        self.memory_service = MemoryApplicationService(self.memory_repository)
+        self.planning_service = PlanningApplicationService(
+            llm_runtime=self.llm_runtime,
+            memory_service=self.memory_service,
+        )
+        self.task_repository = InMemoryTaskRepository()
+        self.task_service = TaskApplicationService(self.task_repository)
+        self.agent_task_runner = AgentTaskRunner(
+            memory_service=self.memory_service,
+            planning_service=self.planning_service,
+            task_repository=self.task_repository,
+        )
 
     def cache_health(self) -> str:
         """返回 Redis 健康状态：ok / disabled / error。"""

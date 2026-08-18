@@ -23,8 +23,16 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     """应用生命周期：启动日志与资源释放。"""
     settings = get_settings()
     logger.info("服务启动完成 (env=%s, level=%s)", settings.app_env, settings.log_level)
+    if settings.redis_enabled:
+        from infrastructure.redis.async_client import get_async_redis
+
+        await get_async_redis().init()
     yield
     get_container().close()
+    if settings.redis_enabled:
+        from infrastructure.redis.async_client import get_async_redis
+
+        await get_async_redis().shutdown()
     logger.info("服务已关闭，外部资源已释放")
 
 

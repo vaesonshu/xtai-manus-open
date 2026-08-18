@@ -16,7 +16,13 @@ class AgentState(TypedDict, total=False):
     """agent 图的状态。"""
 
     goal: str
+    task_id: str
     messages: Annotated[list[BaseMessage], operator.add]
+    # 结构化多 Agent 规划（与领域 TaskPlan 对应）
+    plan_steps: list[dict[str, Any]]
+    current_step_index: int
+    # 记忆上下文（由 MemoryApplicationService 拼装）
+    memory_context: str
     plan: str
     reflection: str
     result: dict[str, Any]
