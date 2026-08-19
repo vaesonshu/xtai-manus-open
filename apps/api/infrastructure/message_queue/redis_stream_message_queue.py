@@ -142,7 +142,9 @@ class RedisStreamMessageQueue(MessageQueuePort):
             return "0"
         return str(messages[0][0])
 
-    async def _acquire_lock(self, lock_key: str, timeout_seconds: float = 5.0) -> str | None:
+    async def _acquire_lock(
+        self, lock_key: str, timeout_seconds: float = 5.0
+    ) -> str | None:
         lock_value = str(uuid.uuid4())
         remaining = timeout_seconds
         while remaining > 0:

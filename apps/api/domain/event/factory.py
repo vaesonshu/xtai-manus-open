@@ -132,6 +132,7 @@ def tool_called(
     function_name: str,
     function_args: dict[str, Any],
     function_result: Any,
+    tool_content: dict[str, Any] | None = None,
 ) -> ToolStreamEvent:
     return ToolStreamEvent(
         tool_call_id=tool_call_id,
@@ -139,5 +140,6 @@ def tool_called(
         function_name=function_name,
         function_args=function_args,
         function_result=function_result,
+        tool_content=tool_content,
         status=ToolEventStatus.CALLED,
     )

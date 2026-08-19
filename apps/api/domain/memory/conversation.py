@@ -42,6 +42,11 @@ class ConversationMemory:
     def get_last_message(self) -> dict[str, Any] | None:
         return self.messages[-1] if self.messages else None
 
+    @staticmethod
+    def get_message_role(message: dict[str, Any]) -> str | None:
+        """读取 ChatML 消息的 role 字段（集中解析，便于后续适配多 LLM 格式）。"""
+        return message.get("role")
+
     def roll_back(self) -> None:
         """回滚最后一条消息（工具调用失败等场景）。"""
         if self.messages:
@@ -76,7 +81,7 @@ class ConversationMemory:
                 )
                 return
 
-        if last.get("role") != "user":
+        if self.get_message_role(last) != "user":
             self.roll_back()
 
     @staticmethod
@@ -91,8 +96,7 @@ class ConversationMemory:
     def compact(self) -> None:
         """压缩记忆中的冗余内容，降低 LLM 上下文占用。"""
         for message in self.messages:
-            role = message.get("role")
-            if role == "tool":
+            if self.get_message_role(message) == "tool":
                 function_name = message.get("function_name") or message.get("name")
                 if function_name in _COMPACT_TOOL_NAMES:
                     message["content"] = "(removed)"

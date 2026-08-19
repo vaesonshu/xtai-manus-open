@@ -10,13 +10,15 @@ from typing import ClassVar
 from domain.ports.message_queue import MessageQueuePort
 from domain.task.identifiers import TaskId
 from domain.task.ports import TaskExecutionPort, TaskRunnerPort
-from infrastructure.message_queue.redis_stream_message_queue import RedisStreamMessageQueue
+from infrastructure.message_queue.redis_stream_message_queue import (
+    RedisStreamMessageQueue,
+)
 
 logger = logging.getLogger(__name__)
 
 
-class RedisStreamTask:
-    """基于 Redis Stream 的 Task 实现。"""
+class RedisStreamTask(TaskExecutionPort):
+    """基于 Redis Stream 的任务执行实例，显式实现 ``TaskExecutionPort``。"""
 
     _task_registry: ClassVar[dict[str, RedisStreamTask]] = {}
 

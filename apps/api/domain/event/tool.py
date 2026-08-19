@@ -18,6 +18,7 @@ class ToolStreamEvent(StreamEvent):
     function_name: str = ""
     function_args: dict[str, Any] = field(default_factory=dict)
     function_result: Any = None
+    tool_content: dict[str, Any] | None = None
     status: ToolEventStatus = ToolEventStatus.CALLING
 
     @property
@@ -36,4 +37,6 @@ class ToolStreamEvent(StreamEvent):
                 "status": self.status.value,
             }
         )
+        if self.tool_content is not None:
+            payload["tool_content"] = self.tool_content
         return payload

@@ -14,6 +14,7 @@ from application.agent.schemas import StepExecutionOutput, SummarizeOutput
 from application.agent.step_result import StepExecutionResult, SummarizeResult
 from application.memory.service import MemoryApplicationService
 from domain.agent.role import AgentRole
+from domain.event.tool_content import build_tool_content
 from domain.event import assistant_message, error_event, tool_called, tool_calling
 from domain.event.base import StreamEvent
 from domain.exceptions import ValidationError, WaitForUserInputError
@@ -191,7 +192,12 @@ class ReActExecutor:
                             tool_name=tool.name,
                             function_name=function_name,
                             function_args=function_args,
-                            function_result=result.to_tool_content(),
+                            function_result=self._serialize_tool_result(result),
+                            tool_content=build_tool_content(
+                                function_name,
+                                function_args,
+                                result,
+                            ),
                         )
                     )
 
@@ -353,6 +359,17 @@ class ReActExecutor:
             )
         )
         self._active_stream_id = None
+
+    @staticmethod
+    def _serialize_tool_result(result: ToolResult) -> Any:
+        """将工具结果转为 SSE 友好的 JSON 对象（前端可直接解析）。"""
+        import json
+
+        raw = result.to_tool_content()
+        try:
+            return json.loads(raw)
+        except json.JSONDecodeError:
+            return raw
 
     async def _invoke_tool(
         self,

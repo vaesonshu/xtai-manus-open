@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -136,33 +136,4 @@ class TaskResponse(BaseModel):
     error: str | None = None
 
 
-class StreamEventSchema(BaseModel):
-    """SSE / Redis Stream 推送事件（与 domain/event 序列化格式对齐）。"""
-
-    id: str
-    type: Literal[  # noqa: A003
-        "plan",
-        "step",
-        "message",
-        "tool",
-        "title",
-        "wait",
-        "error",
-        "done",
-    ]
-    created_at: str
-    status: str | None = None
-    plan: dict[str, Any] | None = None
-    step: dict[str, Any] | None = None
-    role: Literal["user", "assistant"] | None = None
-    message: str | None = None
-    attachments: list[dict[str, Any]] | None = None
-    title: str | None = None
-    error: str | None = None
-    tool_call_id: str | None = None
-    tool_name: str | None = None
-    function_name: str | None = None
-    function_args: dict[str, Any] | None = None
-    function_result: Any | None = None
-
-    model_config = {"extra": "allow"}
+# 流式事件 Schema 已迁移至 stream_event_schemas.py（discriminated union）

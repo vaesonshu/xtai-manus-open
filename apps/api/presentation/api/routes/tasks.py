@@ -15,6 +15,7 @@ from domain.task.identifiers import TaskId
 from infrastructure import Container
 from presentation.api.mappers.task_mapper import to_task_response
 from presentation.api.schemas import ReplyTaskRequest, StartTaskRequest, TaskResponse
+from presentation.api.stream_event_schemas import validate_stream_event_payload
 from presentation.deps import get_container
 
 logger = logging.getLogger(__name__)
@@ -33,8 +34,13 @@ def _get_execution_service(
 
 
 def _format_sse(payload: dict) -> str:
-    """SSE 单条事件格式。"""
-    return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+    """SSE 单条事件格式（出站前校验契约）。"""
+    try:
+        validated = validate_stream_event_payload(payload)
+    except Exception:  # noqa: BLE001 - 单条脏数据不应中断整段 SSE
+        logger.warning("跳过无效 SSE 事件: type=%s", payload.get("type"))
+        validated = payload
+    return f"data: {json.dumps(validated, ensure_ascii=False)}\n\n"
 
 
 async def _stream_task_events(

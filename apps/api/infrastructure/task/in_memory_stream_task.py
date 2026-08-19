@@ -15,8 +15,8 @@ from infrastructure.message_queue.in_memory_message_queue import InMemoryMessage
 logger = logging.getLogger(__name__)
 
 
-class InMemoryStreamTask:
-    """内存版 Task 执行实例，语义对齐 ``RedisStreamTask``。"""
+class InMemoryStreamTask(TaskExecutionPort):
+    """内存版任务执行实例，显式实现 ``TaskExecutionPort``。"""
 
     _task_registry: ClassVar[dict[str, InMemoryStreamTask]] = {}
     _output_archive: ClassVar[dict[str, InMemoryMessageQueue]] = {}

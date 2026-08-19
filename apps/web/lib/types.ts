@@ -48,6 +48,15 @@ export interface TaskResponse {
   error?: string | null
 }
 
+export interface ToolContent {
+  type?: "browser" | "file" | "shell" | "search"
+  screenshot?: string
+  content?: string
+  path?: string
+  operation?: "read" | "write" | "replace"
+  success?: boolean
+}
+
 export interface StreamEvent {
   id: string
   type: StreamEventType
@@ -68,6 +77,7 @@ export interface StreamEvent {
   function_name?: string
   function_args?: Record<string, unknown>
   function_result?: unknown
+  tool_content?: ToolContent
   attachments?: unknown[]
 }
 
@@ -162,6 +172,7 @@ export interface ToolRecord {
   status: "calling" | "called"
   args?: Record<string, unknown>
   result?: unknown
+  toolContent?: ToolContent
 }
 
 export interface TaskUiState {

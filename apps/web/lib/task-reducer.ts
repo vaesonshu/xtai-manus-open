@@ -54,6 +54,7 @@ function upsertTool(tools: ToolRecord[], event: StreamEvent): ToolRecord[] {
     status: event.status === "called" ? "called" : "calling",
     args: event.function_args,
     result: event.function_result,
+    toolContent: event.tool_content,
   }
 
   const index = tools.findIndex((item) => item.id === record.id)

@@ -92,8 +92,6 @@ export function ToolDetailView({
   tool: ToolRecord
   fillHeight?: boolean
 }) {
-  const summary = formatToolResultSummary(tool)
-
   return (
     <div
       className={cn(
@@ -135,22 +133,7 @@ export function ToolDetailView({
               fillHeight && "min-h-0 flex-1 overflow-auto rounded-lg border bg-muted/20 p-1"
             )}
           >
-            {isSearchTool(tool.functionName) ? (
-              <SearchResultView result={tool.result} fillHeight={fillHeight} />
-            ) : summary ? (
-              <p className="rounded-lg border bg-emerald-500/5 px-3 py-2 text-sm text-emerald-700 dark:text-emerald-300">
-                {summary}
-              </p>
-            ) : (
-              <pre
-                className={cn(
-                  "overflow-auto rounded-lg bg-zinc-950 p-3 font-mono text-xs break-all whitespace-pre-wrap text-emerald-400",
-                  fillHeight ? "min-h-full" : "max-h-48"
-                )}
-              >
-                {JSON.stringify(tool.result, null, 2)}
-              </pre>
-            )}
+            <ToolResultBody tool={tool} fillHeight={fillHeight} />
           </div>
         </div>
       )}
@@ -263,3 +246,89 @@ function SearchResultCard({ item }: { item: SearchResultItem }) {
 }
 
 export { getToolPanelTitle, getToolStatusLabel, pickToolIcon }
+
+/** 工具结果区：优先结构化 toolContent，回退 function_result 解析 */
+function ToolResultBody({
+  tool,
+  fillHeight = false,
+}: {
+  tool: ToolRecord
+  fillHeight?: boolean
+}) {
+  const content = tool.toolContent
+  const summary = formatToolResultSummary(tool)
+
+  if (content?.type === "browser") {
+    if (content.screenshot) {
+      return (
+        <img
+          src={
+            content.screenshot.startsWith("data:")
+              ? content.screenshot
+              : `data:image/png;base64,${content.screenshot}`
+          }
+          alt="浏览器截图"
+          className={cn(
+            "rounded-lg border bg-background object-contain",
+            fillHeight ? "max-h-full w-full" : "max-h-64 w-full"
+          )}
+        />
+      )
+    }
+    if (content.content) {
+      return (
+        <pre
+          className={cn(
+            "overflow-auto rounded-lg border bg-muted/40 p-3 text-sm break-all whitespace-pre-wrap",
+            fillHeight ? "min-h-full" : "max-h-64"
+          )}
+        >
+          {content.content}
+        </pre>
+      )
+    }
+  }
+
+  if (content?.type === "file") {
+    return (
+      <div className={cn("space-y-2", fillHeight && "flex h-full min-h-0 flex-col")}>
+        {content.path ? (
+          <p className="shrink-0 truncate text-xs text-muted-foreground">
+            {content.path}
+          </p>
+        ) : null}
+        <pre
+          className={cn(
+            "overflow-auto rounded-lg border bg-muted/40 p-3 font-mono text-xs break-all whitespace-pre-wrap",
+            fillHeight ? "min-h-0 flex-1" : "max-h-64"
+          )}
+        >
+          {content.content || summary || "(无内容)"}
+        </pre>
+      </div>
+    )
+  }
+
+  if (isSearchTool(tool.functionName)) {
+    return <SearchResultView result={tool.result} fillHeight={fillHeight} />
+  }
+
+  if (summary) {
+    return (
+      <p className="rounded-lg border bg-emerald-500/5 px-3 py-2 text-sm text-emerald-700 dark:text-emerald-300">
+        {summary}
+      </p>
+    )
+  }
+
+  return (
+    <pre
+      className={cn(
+        "overflow-auto rounded-lg bg-zinc-950 p-3 font-mono text-xs break-all whitespace-pre-wrap text-emerald-400",
+        fillHeight ? "min-h-full" : "max-h-48"
+      )}
+    >
+      {JSON.stringify(tool.result, null, 2)}
+    </pre>
+  )
+}
