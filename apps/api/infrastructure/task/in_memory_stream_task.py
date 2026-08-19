@@ -7,6 +7,7 @@ import logging
 import uuid
 from typing import ClassVar
 
+from domain.ports.message_queue import MessageQueuePort
 from domain.task.identifiers import TaskId
 from domain.task.ports import TaskExecutionPort, TaskRunnerPort
 from infrastructure.message_queue.in_memory_message_queue import InMemoryMessageQueue
@@ -72,11 +73,11 @@ class InMemoryStreamTask:
         return True
 
     @property
-    def input_stream(self) -> InMemoryMessageQueue:
+    def input_stream(self) -> MessageQueuePort:
         return self._input_stream
 
     @property
-    def output_stream(self) -> InMemoryMessageQueue:
+    def output_stream(self) -> MessageQueuePort:
         return self._output_stream
 
     @property
@@ -108,7 +109,7 @@ class InMemoryStreamTask:
         cls._output_archive.clear()
 
     @classmethod
-    def output_stream_for(cls, task_id: str) -> InMemoryMessageQueue:
+    def output_stream_for(cls, task_id: str) -> MessageQueuePort:
         """按任务 ID 获取输出流（含已归档实例）。"""
         task = cls._task_registry.get(task_id)
         if task is not None:

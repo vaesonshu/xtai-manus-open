@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Protocol
 
+from domain.ports.message_queue import MessageQueuePort
 from domain.task.ports import TaskExecutionPort, TaskRunnerPort
 from infrastructure.task.in_memory_stream_task import InMemoryStreamTask
 from infrastructure.task.redis_stream_task import RedisStreamTask
@@ -19,7 +20,7 @@ class TaskExecutionBackend(Protocol):
     def get(cls, task_id: str) -> TaskExecutionPort | None: ...
 
     @classmethod
-    def output_stream_for(cls, task_id: str): ...
+    def output_stream_for(cls, task_id: str) -> MessageQueuePort: ...
 
 
 class TaskExecutionFactory:
@@ -36,5 +37,5 @@ class TaskExecutionFactory:
     def get(self, task_id: str) -> TaskExecutionPort | None:
         return self._backend.get(task_id)
 
-    def output_stream_for(self, task_id: str):
+    def output_stream_for(self, task_id: str) -> MessageQueuePort:
         return self._backend.output_stream_for(task_id)

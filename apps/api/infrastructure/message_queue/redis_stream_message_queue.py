@@ -10,6 +10,7 @@ from typing import Any
 
 from redis.asyncio import Redis
 
+from domain.ports.message_queue import MessageQueuePort
 from infrastructure.config import get_settings
 from infrastructure.message_queue.serialization import decode_message, encode_message
 from infrastructure.redis.async_client import AsyncRedisClient, get_async_redis
@@ -17,8 +18,8 @@ from infrastructure.redis.async_client import AsyncRedisClient, get_async_redis
 logger = logging.getLogger(__name__)
 
 
-class RedisStreamMessageQueue:
-    """基于 Redis Stream 的消息队列实现。"""
+class RedisStreamMessageQueue(MessageQueuePort):
+    """基于 Redis Stream 的消息队列，显式实现 ``MessageQueuePort``。"""
 
     def __init__(
         self,

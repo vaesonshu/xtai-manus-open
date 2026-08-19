@@ -7,6 +7,7 @@ from typing import Protocol
 
 from application.task.service import TaskApplicationService
 from domain.exceptions import ConflictError, NotFoundError
+from domain.ports.message_queue import MessageQueuePort
 from domain.task.identifiers import TaskId
 from domain.task.ports import TaskExecutionPort, TaskRunnerPort
 from domain.task.status import TaskStatus
@@ -23,7 +24,7 @@ class TaskExecutionFactory(Protocol):
     def get(self, task_id: str) -> TaskExecutionPort | None:
         ...
 
-    def output_stream_for(self, task_id: str):
+    def output_stream_for(self, task_id: str) -> MessageQueuePort:
         ...
 
 
@@ -69,6 +70,6 @@ class TaskExecutionApplicationService:
         """获取仍在注册表中的执行实例。"""
         return self._executions.get(task_id)
 
-    def output_stream_for(self, task_id: str):
+    def output_stream_for(self, task_id: str) -> MessageQueuePort:
         """获取任务输出事件流（支持已完成任务回放）。"""
         return self._executions.output_stream_for(task_id)

@@ -9,11 +9,12 @@ from collections import deque
 from collections.abc import AsyncGenerator
 from typing import Any
 
+from domain.ports.message_queue import MessageQueuePort
 from infrastructure.message_queue.serialization import decode_message, encode_message
 
 
-class InMemoryMessageQueue:
-    """基于 deque 的内存消息队列，实现 ``MessageQueuePort`` 语义。"""
+class InMemoryMessageQueue(MessageQueuePort):
+    """基于 deque 的内存消息队列，显式实现 ``MessageQueuePort``。"""
 
     def __init__(self) -> None:
         self._messages: deque[tuple[str, str]] = deque()

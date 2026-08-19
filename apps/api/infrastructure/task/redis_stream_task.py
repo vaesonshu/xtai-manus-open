@@ -45,7 +45,7 @@ class RedisStreamTask:
         self._cleanup_registry()
 
     @classmethod
-    def output_stream_for(cls, task_id: str) -> RedisStreamMessageQueue:
+    def output_stream_for(cls, task_id: str) -> MessageQueuePort:
         """按任务 ID 打开输出流（任务结束后仍可回放 SSE 事件）。"""
         return RedisStreamMessageQueue(f"task:output:{task_id}")
 
