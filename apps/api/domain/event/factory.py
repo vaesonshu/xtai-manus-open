@@ -9,6 +9,7 @@ from domain.event.plan import PlanStreamEvent
 from domain.event.status import PlanEventStatus, StepEventStatus, ToolEventStatus
 from domain.event.step import StepStreamEvent
 from domain.event.tool import ToolStreamEvent
+from domain.file.attachment import FileAttachment
 from domain.task.plan import TaskPlan
 from domain.task.step import TaskStep
 
@@ -42,7 +43,7 @@ def _serialize_step(step: TaskStep) -> dict[str, Any]:
         "status": step.status.value,
         "success": step.success,
         "result": step.result,
-        "attachments": list(step.attachments),
+        "attachments": [attachment.to_dict() for attachment in step.attachments],
         "error": step.error,
     }
 
@@ -82,7 +83,7 @@ def assistant_message(
     *,
     partial: bool = False,
     stream_id: str | None = None,
-    attachments: list[dict[str, Any]] | None = None,
+    attachments: list[FileAttachment] | None = None,
 ) -> MessageStreamEvent:
     return MessageStreamEvent(
         role="assistant",

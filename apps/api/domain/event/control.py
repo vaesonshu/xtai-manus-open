@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from typing import Any, Literal
 
 from domain.event.base import StreamEvent
+from domain.file.attachment import FileAttachment
 
 
 @dataclass
@@ -14,7 +15,7 @@ class MessageStreamEvent(StreamEvent):
 
     role: Literal["user", "assistant"] = "assistant"
     message: str = ""
-    attachments: list[dict[str, Any]] = field(default_factory=list)
+    attachments: list[FileAttachment] = field(default_factory=list)
     partial: bool = False
     stream_id: str | None = None
 
@@ -28,7 +29,7 @@ class MessageStreamEvent(StreamEvent):
             {
                 "role": self.role,
                 "message": self.message,
-                "attachments": self.attachments,
+                "attachments": [attachment.to_dict() for attachment in self.attachments],
                 "partial": self.partial,
             }
         )

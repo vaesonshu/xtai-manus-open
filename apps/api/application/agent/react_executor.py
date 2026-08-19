@@ -18,6 +18,7 @@ from domain.event.tool_content import build_tool_content
 from domain.event import assistant_message, error_event, tool_called, tool_calling
 from domain.event.base import StreamEvent
 from domain.exceptions import ValidationError, WaitForUserInputError
+from domain.file.attachment import FileAttachment, from_path_strings
 from domain.memory.constants import MESSAGE_ASK_USER_TOOL
 from domain.ports.json_parser import JsonParserPort
 from domain.ports.llm import LlmRuntimePort
@@ -344,7 +345,7 @@ class ReActExecutor:
         on_event: OnEventCallback | None,
         message: str,
         *,
-        attachments: list[Any] | None = None,
+        attachments: list[FileAttachment] | None = None,
     ) -> None:
         """推送解析后的最终助手消息，替换流式中间帧。"""
         if on_event is None or not message.strip():
@@ -394,7 +395,7 @@ class ReActExecutor:
             return StepExecutionResult(
                 success=output.success,
                 result=output.result,
-                attachments=tuple(output.attachments),
+                attachments=from_path_strings(output.attachments),
                 raw_content=content,
             )
         except Exception:  # noqa: BLE001
@@ -412,7 +413,7 @@ class ReActExecutor:
             output = SummarizeOutput.model_validate(parsed)
             return SummarizeResult(
                 message=output.message,
-                attachments=tuple(output.attachments),
+                attachments=from_path_strings(output.attachments),
             )
         except Exception:  # noqa: BLE001
             logger.warning("汇总输出非 JSON，按纯文本处理")

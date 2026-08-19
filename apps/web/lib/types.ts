@@ -18,6 +18,17 @@ export type StreamEventType =
   | "error"
   | "done"
 
+/** 与后端 domain/file/attachment.py 对齐的文件附件 */
+export interface FileAttachment {
+  id: string
+  filename: string
+  filepath: string
+  key?: string
+  extension?: string
+  mime_type?: string
+  size?: number
+}
+
 export interface TaskStep {
   step_id: string
   description: string
@@ -26,7 +37,7 @@ export interface TaskStep {
   result?: string | null
   error?: string | null
   success?: boolean
-  attachments?: unknown[]
+  attachments?: FileAttachment[]
 }
 
 export interface TaskPlan {
@@ -78,7 +89,7 @@ export interface StreamEvent {
   function_args?: Record<string, unknown>
   function_result?: unknown
   tool_content?: ToolContent
-  attachments?: unknown[]
+  attachments?: FileAttachment[]
 }
 
 export interface HealthResponse {

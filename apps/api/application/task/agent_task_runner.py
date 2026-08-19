@@ -357,7 +357,7 @@ class AgentTaskRunner:
             return {}
         return {
             "summary": summary.message,
-            "attachments": list(summary.attachments),
+            "attachments": [attachment.to_dict() for attachment in summary.attachments],
         }
 
     @staticmethod

@@ -155,7 +155,8 @@ async def test_react_executor_structured_json_output() -> None:
     )
     assert result.success is True
     assert result.result == "已生成报告"
-    assert result.attachments == ("/workspace/report.md",)
+    assert result.attachments[0].filepath == "/workspace/report.md"
+    assert result.attachments[0].filename == "report.md"
 
 
 @pytest.mark.asyncio

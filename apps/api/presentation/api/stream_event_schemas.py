@@ -28,11 +28,23 @@ class StepStreamEventSchema(_StreamEventBase):
     status: str
 
 
+class FileAttachmentSchema(BaseModel):
+    """文件附件 schema，与 domain/file/attachment.py 序列化字段对齐。"""
+
+    id: str = ""
+    filename: str = ""
+    filepath: str = ""
+    key: str = ""
+    extension: str = ""
+    mime_type: str = ""
+    size: int = 0
+
+
 class MessageStreamEventSchema(_StreamEventBase):
     type: Literal["message"]
     role: Literal["user", "assistant"]
     message: str = ""
-    attachments: list[dict[str, Any]] = Field(default_factory=list)
+    attachments: list[FileAttachmentSchema] = Field(default_factory=list)
     partial: bool = False
     stream_id: str | None = None
 

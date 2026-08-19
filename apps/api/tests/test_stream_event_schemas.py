@@ -13,6 +13,7 @@ from domain.event import (
     user_message,
     wait_event,
 )
+from domain.file.attachment import FileAttachment
 from domain.task.plan import TaskPlan
 from presentation.api.stream_event_schemas import validate_stream_event_payload
 
@@ -55,6 +56,17 @@ def test_validate_tool_event_with_tool_content() -> None:
     ).as_dict()
     validated = validate_stream_event_payload(payload)
     assert validated["tool_content"]["type"] == "file"
+
+
+def test_validate_message_with_file_attachments() -> None:
+    attachment = FileAttachment.from_filepath("/workspace/report.md")
+    payload = assistant_message(
+        "交付报告",
+        attachments=[attachment],
+    ).as_dict()
+    validated = validate_stream_event_payload(payload)
+    assert validated["attachments"][0]["filepath"] == "/workspace/report.md"
+    assert validated["attachments"][0]["filename"] == "report.md"
 
 
 def test_validate_rejects_unknown_event_type() -> None:

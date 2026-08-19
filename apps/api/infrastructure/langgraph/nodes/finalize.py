@@ -36,7 +36,9 @@ def make_summarize_node(
                 )
                 summary_payload = {
                     "summary": summary.message,
-                    "attachments": list(summary.attachments),
+                    "attachments": [
+                        attachment.to_dict() for attachment in summary.attachments
+                    ],
                 }
             except Exception:  # noqa: BLE001
                 pass

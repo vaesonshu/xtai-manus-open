@@ -7,6 +7,7 @@ from domain.agent.role import AgentRole
 from domain.event import step_completed, step_started, user_message
 from domain.event.base import StreamEvent
 from domain.exceptions import WaitForUserInputError
+from domain.file.attachment import FileAttachment
 from domain.memory.kind import MemoryKind
 from domain.task.identifiers import TaskId
 from infrastructure.langgraph.dependencies import GraphNodeDependencies
@@ -75,7 +76,9 @@ def make_execute_step_node(
                 "result": result.result,
                 "raw_content": result.raw_content,
                 "display_text": result.display_text,
-                "attachments": list(result.attachments),
+                "attachments": [
+                    attachment.to_dict() for attachment in result.attachments
+                ],
             },
             "waiting_question": None,
             "waiting_agent_role": None,
@@ -96,7 +99,7 @@ def make_after_step_node(
         agent_task = require_agent_task(deps, task_id)
         raw = state.get("last_step_result") or {}
         display_text = str(raw.get("display_text") or raw.get("result") or "")
-        attachments = tuple(raw.get("attachments") or ())
+        attachments = FileAttachment.coerce_many(raw.get("attachments") or ())
 
         step = agent_task.complete_current_step(
             display_text,

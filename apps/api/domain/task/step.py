@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 
 from domain.agent.role import AgentRole
 from domain.exceptions import ConflictError, ValidationError
+from domain.file.attachment import FileAttachment
 from domain.task.identifiers import StepId
 from domain.task.status import ExecutionStatus
 
@@ -24,7 +25,7 @@ class TaskStep:
     success: bool | None = None
     result: str | None = None
     error: str | None = None
-    attachments: tuple[str, ...] = field(default_factory=tuple)
+    attachments: tuple[FileAttachment, ...] = field(default_factory=tuple)
 
     @classmethod
     def create(
@@ -63,7 +64,7 @@ class TaskStep:
         result: str,
         *,
         success: bool = True,
-        attachments: tuple[str, ...] = (),
+        attachments: tuple[FileAttachment, ...] = (),
     ) -> None:
         """标记步骤成功完成。"""
         if self.status is not ExecutionStatus.RUNNING:

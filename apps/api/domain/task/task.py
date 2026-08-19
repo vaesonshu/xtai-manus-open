@@ -7,6 +7,7 @@ from typing import Any
 
 from domain.agent.role import AgentRole
 from domain.exceptions import ConflictError, ValidationError
+from domain.file.attachment import FileAttachment
 from domain.planning.step_spec import PlanStepSpec
 from domain.task.events import (
     TaskCancelled,
@@ -149,7 +150,7 @@ class AgentTask:
         result: str,
         *,
         success: bool = True,
-        attachments: tuple[str, ...] = (),
+        attachments: tuple[FileAttachment, ...] = (),
     ) -> TaskStep:
         """完成当前运行中的步骤。"""
         step = self._require_running_step()

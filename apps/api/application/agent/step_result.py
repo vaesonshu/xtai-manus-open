@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from domain.file.attachment import FileAttachment
+
 
 @dataclass(frozen=True)
 class StepExecutionResult:
@@ -11,7 +13,7 @@ class StepExecutionResult:
 
     success: bool
     result: str
-    attachments: tuple[str, ...] = field(default_factory=tuple)
+    attachments: tuple[FileAttachment, ...] = field(default_factory=tuple)
     raw_content: str = ""
 
     @property
@@ -25,4 +27,4 @@ class SummarizeResult:
     """任务结束汇总输出。"""
 
     message: str
-    attachments: tuple[str, ...] = field(default_factory=tuple)
+    attachments: tuple[FileAttachment, ...] = field(default_factory=tuple)
