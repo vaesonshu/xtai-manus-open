@@ -15,6 +15,25 @@ export function getApiBase(): string {
   return "/api"
 }
 
+/**
+ * SSE 订阅专用 API 根路径。
+ * Next.js rewrite 代理在 dev 环境会缓冲 text/event-stream，导致事件整批到达；
+ * 本地开发时直连 FastAPI，保证 plan / message 等事件实时渲染。
+ */
+export function getStreamApiBase(): string {
+  const fromEnv = process.env.NEXT_PUBLIC_API_URL?.trim()
+  if (fromEnv) {
+    return fromEnv.replace(/\/$/, "")
+  }
+  if (typeof window !== "undefined") {
+    const { hostname } = window.location
+    if (hostname === "localhost" || hostname === "127.0.0.1") {
+      return "http://127.0.0.1:8000"
+    }
+  }
+  return getApiBase()
+}
+
 class ApiError extends Error {
   constructor(
     message: string,
@@ -127,7 +146,7 @@ export function subscribeTaskStream(
   onError?: (error: Event) => void
 ): () => void {
   const source = new EventSource(
-    `${getApiBase()}/v1/tasks/${taskId}/stream`
+    `${getStreamApiBase()}/v1/tasks/${taskId}/stream`
   )
 
   source.onmessage = (message) => {

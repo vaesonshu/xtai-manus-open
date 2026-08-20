@@ -109,15 +109,18 @@ class ReActExecutor:
         goal: str,
         agent_role: AgentRole = AgentRole.COORDINATOR,
         on_event: OnEventCallback | None = None,
+        deliverables: str = "",
     ) -> SummarizeResult:
         """任务完成后汇总历史上下文并生成交付结果。"""
         from application.prompts.react import SUMMARIZE_PROMPT
 
         role_config = get_role_config(agent_role)
         context = self._memory.build_context(task_id)
+        deliverable_block = deliverables.strip() or "(无)"
         query = (
             f"{SUMMARIZE_PROMPT.strip()}\n\n"
             f"任务目标：{goal}\n\n"
+            f"各步骤已产出的交付内容（必须完整纳入最终 message）：\n{deliverable_block}\n\n"
             f"执行上下文：\n{context or '(无)'}"
         )
         await self._ensure_system_prompt(task_id, agent_role, role_config.system_prompt)
@@ -135,12 +138,34 @@ class ReActExecutor:
         if not content:
             raise ValidationError("summarize returned empty content")
         result = await self._parse_summarize_output(content)
+        final_message = self._resolve_summary_message(
+            result.message,
+            deliverables=deliverables.strip(),
+        )
         await self._emit_final_assistant_message(
             on_event,
-            result.message,
+            final_message,
             attachments=list(result.attachments),
         )
-        return result
+        return SummarizeResult(
+            message=final_message,
+            attachments=result.attachments,
+        )
+
+    @staticmethod
+    def _resolve_summary_message(message: str, *, deliverables: str) -> str:
+        """LLM 汇总过短时用步骤交付物兜底，避免只推送一句空话。"""
+        final_message = message.strip()
+        if not deliverables:
+            return final_message
+        min_len = max(120, int(len(deliverables) * 0.3))
+        if not final_message or len(final_message) < min_len:
+            return deliverables
+        if deliverables not in final_message and len(deliverables) > len(
+            final_message
+        ):
+            return f"{final_message}\n\n{deliverables}"
+        return final_message
 
     async def _run_tool_loop(
         self,

@@ -16,6 +16,7 @@ from infrastructure.persistence.checkpointer import (
     reset_checkpointer_state,
     resolve_checkpoint_backend,
     sqlalchemy_url_to_postgres_uri,
+    _setup_postgres_checkpointer_migrations,
 )
 
 
@@ -61,3 +62,36 @@ def test_checkpointer_info_memory() -> None:
         Settings(checkpoint_db_path=":memory:", checkpoint_backend="memory")
     )
     assert info.backend == "memory"
+
+
+@pytest.mark.asyncio
+async def test_setup_postgres_migrations_uses_autocommit_connection(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Postgres 迁移应通过 from_conn_string（autocommit）执行，而非连接池事务。"""
+    setup_calls: list[str] = []
+
+    class FakeSetupSaver:
+        async def setup(self) -> None:
+            setup_calls.append("setup")
+
+    class FakeContext:
+        async def __aenter__(self) -> FakeSetupSaver:
+            return FakeSetupSaver()
+
+        async def __aexit__(self, *_args: object) -> None:
+            return None
+
+    def fake_from_conn_string(conn_uri: str):
+        assert conn_uri == "postgresql://postgres:postgres@localhost:5433/xtai"
+        return FakeContext()
+
+    monkeypatch.setattr(
+        "infrastructure.persistence.checkpointer.AsyncPostgresSaver.from_conn_string",
+        fake_from_conn_string,
+    )
+
+    await _setup_postgres_checkpointer_migrations(
+        "postgresql://postgres:postgres@localhost:5433/xtai"
+    )
+    assert setup_calls == ["setup"]

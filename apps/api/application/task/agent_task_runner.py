@@ -346,11 +346,15 @@ class AgentTaskRunner:
         async def on_event(event: StreamEvent) -> None:
             await self._emit(execution, event)
 
+        agent_task = self._tasks.get(task_id)
+        deliverables = agent_task.primary_deliverable() if agent_task else ""
+
         try:
             summary = await summarize(
                 task_id=task_id,
                 goal=goal,
                 on_event=on_event,
+                deliverables=deliverables,
             )
         except Exception:  # noqa: BLE001
             logger.exception("任务汇总失败，跳过 summarize")

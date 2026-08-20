@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from collections.abc import AsyncIterator
@@ -11,6 +12,7 @@ from fastapi.responses import StreamingResponse
 
 from application.task.execution_service import TaskExecutionApplicationService
 from application.task.service import TaskApplicationService
+from domain.exceptions import NotFoundError
 from domain.task.identifiers import TaskId
 from infrastructure import Container
 from presentation.api.mappers.task_mapper import to_task_response
@@ -56,6 +58,7 @@ async def _stream_task_events(
         if not isinstance(payload, dict):
             continue
         yield _format_sse(payload)
+        await asyncio.sleep(0)
         last_id = message_id
         if payload.get("type") in {"done", "wait", "error"}:
             return
@@ -80,6 +83,7 @@ async def _stream_task_events(
             continue
 
         yield _format_sse(payload)
+        await asyncio.sleep(0)
         last_id = message_id
         if payload.get("type") in {"done", "wait", "error"}:
             return
@@ -121,7 +125,11 @@ async def stream_task(
     task_service: TaskApplicationService = Depends(_get_task_service),
 ) -> StreamingResponse:
     """SSE 推送任务执行事件（plan / step / tool / message / wait / done）。"""
-    task_service.get(TaskId(task_id))
+    try:
+        task_service.get(TaskId(task_id))
+    except NotFoundError:
+        # init_task 异步写入前也允许订阅 output stream，避免前端首连 404
+        pass
     return StreamingResponse(
         _stream_task_events(task_id, execution_service, task_service),
         media_type="text/event-stream",

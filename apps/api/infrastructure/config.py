@@ -59,6 +59,8 @@ class Settings(BaseSettings):
     agent_orchestrator: Literal["react", "langgraph"] = "langgraph"
     # 是否调用 LLM 做在线规划（False 时使用离线三步规划）
     agent_use_llm_planning: bool = True
+    # 是否在每步完成后动态重规划（False 时规划步骤在任务开始时固定）
+    agent_replan_after_each_step: bool = False
     # LangGraph 可观测性：结构化日志 / 可选 OpenTelemetry span
     langgraph_tracing_enabled: bool = True
     # 多实例部署：启用 Redis 任务执行注册表（与 Postgres checkpoint 配合断点续跑）

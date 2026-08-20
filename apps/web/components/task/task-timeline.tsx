@@ -48,9 +48,16 @@ export function TaskTimeline({
   selectedToolId,
   className,
 }: TaskTimelineProps) {
-  const { timeline, isStreaming, streamingMessageId } = state
+  const { timeline, isStreaming } = state
   const scrollFingerprint = getTimelineScrollFingerprint(timeline)
-  const showAssistantLoading = isStreaming && !streamingMessageId
+  // 已有 plan/step/工具/助手消息时不再显示「正在思考」，避免 SSE 已推送但 UI 仍空白
+  const hasAssistantActivity = timeline.some(
+    (item) =>
+      item.kind === "step" ||
+      item.kind === "tool" ||
+      (item.kind === "message" && item.role === "assistant")
+  )
+  const showAssistantLoading = isStreaming && !hasAssistantActivity
 
   const { rootRef, contentRef } = useScrollToBottom<HTMLDivElement>(
     [timeline.length, scrollFingerprint, isStreaming],

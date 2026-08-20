@@ -71,7 +71,7 @@ class LangGraphTaskRunner:
             initial_state: dict[str, Any] = {
                 "goal": goal,
                 "task_id": str(task_id),
-                "replan_enabled": self._settings.agent_use_llm_planning,
+                "replan_enabled": self._settings.agent_replan_after_each_step,
                 "use_llm_planning": self._settings.agent_use_llm_planning,
                 "max_iterations": self._settings.agent_max_iterations,
                 "current_step_index": 0,

@@ -200,4 +200,6 @@ export interface TaskUiState {
   error: string | null
   isStreaming: boolean
   streamingMessageId: string | null
+  /** 已处理的 SSE 事件 id，避免重连回放重复渲染 */
+  seenEventIds: Record<string, true>
 }

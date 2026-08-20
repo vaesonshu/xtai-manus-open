@@ -198,7 +198,7 @@ class Container:
             task_repository=task_repository,
             step_executor=step_executor,
             use_llm_planning=settings.agent_use_llm_planning,
-            replan_after_each_step=settings.agent_use_llm_planning,
+            replan_after_each_step=settings.agent_replan_after_each_step,
         )
 
     def cache_health(self) -> str:

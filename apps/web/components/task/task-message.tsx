@@ -138,12 +138,21 @@ function StepBlock({
 }) {
   const [expanded, setExpanded] = useState(true)
   const { step, eventStatus } = stepItem
-  const isRunning = eventStatus === "started" || step.status === "running"
+  const isRunning =
+    eventStatus === "started" ||
+    step.status === "running" ||
+    step.status === "started"
   const isFailed = step.status === "failed" || eventStatus === "failed"
+  const isCompleted =
+    eventStatus === "completed" ||
+    step.status === "completed" ||
+    Boolean(step.success)
   const displayResult = step.result?.trim() ?? ""
   const hasResult = Boolean(displayResult)
   const hasError = Boolean(step.error?.trim())
-  const hasBody = hasResult || hasError || isRunning
+  // 完成后具体输出由同一段内的工具 / 助手消息展示，步骤卡片只保留标题与状态
+  const showResultBody = hasResult && !isCompleted
+  const hasBody = showResultBody || hasError || isRunning
 
   return (
     <div className={cn("mt-3 flex flex-col", className)}>
@@ -200,11 +209,11 @@ function StepBlock({
           <div className="overflow-hidden">
             <div className="flex pt-2">
               <div className="flex min-w-0 flex-1 flex-col gap-3">
-                {isRunning && !hasResult && (
+                {isRunning && !showResultBody && (
                   <p className="text-xs text-muted-foreground">等待工具调用…</p>
                 )}
 
-                {hasResult && (
+                {showResultBody && (
                   <div
                     className={cn(
                       "rounded-lg border bg-muted/40 px-3 py-2 text-sm",

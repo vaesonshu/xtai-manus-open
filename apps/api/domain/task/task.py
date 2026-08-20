@@ -208,6 +208,21 @@ class AgentTask:
         self._events = []
         return events
 
+    def primary_deliverable(self) -> str:
+        """取已完成步骤中最长的交付正文，供任务结束汇总兜底。"""
+        if self.plan is None:
+            return ""
+        results = [
+            step.result.strip()
+            for step in self.plan.steps
+            if step.status is ExecutionStatus.COMPLETED
+            and step.result
+            and step.result.strip()
+        ]
+        if not results:
+            return ""
+        return max(results, key=len)
+
     def _record_plan_snapshot(self, reason: str) -> None:
         """将当前规划写入版本链。"""
         if self.plan is None:

@@ -33,7 +33,7 @@ interface TaskShellProps {
 /** Manus 风格主界面：侧栏 + 聊天区 + 工具工作区 */
 export function TaskShell({ taskId = null, onTaskCreated }: TaskShellProps) {
   const isMobile = useIsMobile()
-  const { state, sessions, refreshSessions, startTask, sendReply } =
+  const { state, sessions, sessionTaskId, refreshSessions, startTask, sendReply } =
     useTaskSession(taskId)
 
   const [health, setHealth] = useState<HealthResponse | null>(null)
@@ -64,7 +64,7 @@ export function TaskShell({ taskId = null, onTaskCreated }: TaskShellProps) {
   useEffect(() => {
     setSelectedToolId(null)
     setShowToolPanel(false)
-  }, [taskId])
+  }, [sessionTaskId])
 
   const refreshHealth = useCallback(async () => {
     try {
@@ -103,8 +103,18 @@ export function TaskShell({ taskId = null, onTaskCreated }: TaskShellProps) {
     setShowToolPanel(true)
   }, [])
 
-  const canReply = Boolean(taskId) && state.status === "waiting"
+  const canReply = Boolean(sessionTaskId) && state.status === "waiting"
+  // 任务结束后允许继续输入（创建新任务），仅执行中禁用
+  const canStartFollowUp =
+    Boolean(sessionTaskId) &&
+    (state.status === "completed" ||
+      state.status === "failed" ||
+      state.status === "cancelled")
+  const composerDisabled =
+    Boolean(sessionTaskId) && !canReply && !canStartFollowUp
   const showPlanBar = state.steps.length > 0 || Boolean(state.title)
+  const showWelcome =
+    !sessionTaskId && state.timeline.length === 0 && !creating
 
   const toolPanelContent = (
     <ToolPanel tools={state.tools} focusedToolId={focusedToolId} />
@@ -114,7 +124,7 @@ export function TaskShell({ taskId = null, onTaskCreated }: TaskShellProps) {
     <SidebarProvider defaultOpen>
       <TaskSidebar
         sessions={sessions}
-        activeTaskId={taskId}
+        activeTaskId={sessionTaskId}
         onRefresh={refreshSessions}
       />
 
@@ -129,7 +139,7 @@ export function TaskShell({ taskId = null, onTaskCreated }: TaskShellProps) {
 
         <div className="flex min-h-0 flex-1 overflow-hidden">
           <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-            {!taskId ? (
+            {showWelcome ? (
               <WelcomeScreen loading={creating} onSubmit={handleCreate} />
             ) : (
               <>
@@ -153,7 +163,27 @@ export function TaskShell({ taskId = null, onTaskCreated }: TaskShellProps) {
                       loading={state.isStreaming}
                       onSubmit={handleReply}
                     />
-                  ) : null}
+                  ) : (
+                    <TaskComposer
+                      mode={
+                        canStartFollowUp || !sessionTaskId ? "create" : "reply"
+                      }
+                      loading={creating || state.isStreaming}
+                      disabled={composerDisabled}
+                      placeholder={
+                        canStartFollowUp
+                          ? "任务已结束，描述新任务继续…"
+                          : composerDisabled
+                            ? "Agent 正在执行任务，等待向你提问时可在此回复"
+                            : undefined
+                      }
+                      onSubmit={
+                        canStartFollowUp || !sessionTaskId
+                          ? handleCreate
+                          : handleReply
+                      }
+                    />
+                  )}
                 </div>
               </>
             )}

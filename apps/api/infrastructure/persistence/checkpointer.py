@@ -84,14 +84,25 @@ async def _create_sqlite_checkpointer(checkpoint_db_path: str) -> AsyncSqliteSav
     return saver
 
 
+async def _setup_postgres_checkpointer_migrations(conn_uri: str) -> None:
+    """在 autocommit 连接上执行 Postgres checkpoint 迁移。
+
+    LangGraph 部分迁移含 ``CREATE INDEX CONCURRENTLY``，不能在普通事务块内执行。
+    ``from_conn_string`` 使用 ``autocommit=True``，与官方推荐初始化方式一致。
+    """
+    async with AsyncPostgresSaver.from_conn_string(conn_uri) as setup_saver:
+        await setup_saver.setup()
+
+
 async def _create_postgres_checkpointer(database_url: str) -> AsyncPostgresSaver:
     """创建 AsyncPostgresSaver 并初始化表结构。"""
     global _postgres_pool
     conn_uri = sqlalchemy_url_to_postgres_uri(database_url)
+    # 迁移与运行时连接池分离：迁移需 autocommit，运行时仍用连接池。
+    await _setup_postgres_checkpointer_migrations(conn_uri)
     _postgres_pool = AsyncConnectionPool(conn_uri, min_size=1, max_size=5, open=False)
     await _postgres_pool.open()
     saver = AsyncPostgresSaver(_postgres_pool)
-    await saver.setup()
     logger.info("LangGraph AsyncPostgresSaver 已初始化")
     return saver
 

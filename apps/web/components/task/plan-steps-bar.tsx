@@ -3,6 +3,7 @@
 import { useState } from "react"
 
 import type { TaskStep } from "@/lib/types"
+import { getStepStatusLabel, getVisiblePlanSteps } from "@/lib/plan-steps"
 import { Badge } from "@workspace/ui/components/badge"
 import { Button } from "@workspace/ui/components/button"
 import { Progress } from "@workspace/ui/components/progress"
@@ -46,9 +47,10 @@ interface PlanStepsBarProps {
 /** 输入框上方的可折叠步骤进度条 */
 export function PlanStepsBar({ title, steps, className }: PlanStepsBarProps) {
   const [expanded, setExpanded] = useState(true)
+  const visibleSteps = getVisiblePlanSteps(steps)
 
-  const total = steps.length
-  const done = countCompleted(steps)
+  const total = visibleSteps.length
+  const done = countCompleted(visibleSteps)
   const pct = total ? Math.round((done / total) * 100) : 0
 
   if (total === 0 && !title) {
@@ -85,7 +87,7 @@ export function PlanStepsBar({ title, steps, className }: PlanStepsBarProps) {
           <div className="space-y-2 px-3 pb-3">
             <Progress value={pct} className="h-1" />
             <ul className="space-y-1.5">
-              {steps.map((step, index) => (
+              {visibleSteps.map((step, index) => (
                 <li
                   key={step.step_id}
                   className="flex items-start gap-2 text-xs"
@@ -94,8 +96,7 @@ export function PlanStepsBar({ title, steps, className }: PlanStepsBarProps) {
                   <div className="min-w-0 flex-1">
                     <p className="font-medium">{step.description}</p>
                     <p className="text-muted-foreground">
-                      {step.agent_role}
-                      {step.result ? ` · ${step.result}` : ""}
+                      {step.agent_role} · {getStepStatusLabel(step.status)}
                     </p>
                   </div>
                 </li>

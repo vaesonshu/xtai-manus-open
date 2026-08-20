@@ -44,12 +44,14 @@ SUMMARIZE_PROMPT = """
 任务已完成，你需要将最终结果交付给用户。
 
 注意事项：
-- 你应该详细向用户解释最终结果。
+- 必须基于各步骤已产出的交付内容，输出完整、可直接使用的最终结果（不要只写一句总结语）。
+- 你应该详细向用户解释最终结果，保留行程/方案/报告等的完整细节。
 - 如有必要，编写 Markdown 格式的内容以清晰地呈现结果。
 - 如果之前的步骤生成了文件，必须通过 attachments 字段交付给用户。
 
 返回格式要求：
 - 必须返回 JSON 对象，包含 message（string）与 attachments（string[]）。
+- message 字段应包含完整交付正文，不可仅用「已完成」「希望您愉快」等空话替代。
 """
 
 JSON_RESPONSE_FORMAT: dict[str, str] = {"type": "json_object"}
