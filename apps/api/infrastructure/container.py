@@ -28,11 +28,15 @@ from domain.ports import (
 )
 from domain.task.ports import TaskRunnerPort
 from langgraph.graph.state import CompiledStateGraph
+from infrastructure.browser.http_browser import HttpBrowser
 from infrastructure.browser.stub_browser import StubBrowser
+from domain.ports.browser import BrowserPort
 from infrastructure.json.repair_json_parser import RepairJsonParser
 from infrastructure.memory.in_memory_repository import InMemoryMemoryStoreRepository
 from infrastructure.sandbox.local_sandbox import LocalSandbox
+from infrastructure.search.baidu_search_engine import BaiduSearchEngine
 from infrastructure.search.mock_search_engine import MockSearchEngine
+from domain.ports.search_engine import SearchEnginePort
 from infrastructure.cache import NullCache, RedisCache
 from infrastructure.config import Settings
 from infrastructure.events import InMemoryEventBus
@@ -116,8 +120,8 @@ class Container:
         self.agent_graph: CompiledStateGraph | None = None
 
         sandbox = LocalSandbox(f"{settings.data_dir}/sandbox")
-        search_engine = MockSearchEngine()
-        browser = StubBrowser()
+        search_engine = self._build_search_engine(settings)
+        browser = self._build_browser(settings)
         json_parser = RepairJsonParser()
         tool_registry = ToolRegistry(
             [
@@ -278,6 +282,26 @@ class Container:
         if self.database is None:
             raise RuntimeError("database_enabled=True 但 Database 未初始化")
         return PostgresMemoryStoreRepository(self.database)
+
+    @staticmethod
+    def _build_browser(settings: Settings) -> BrowserPort:
+        """按配置装配浏览器（默认 HTTP 抓取实现）。"""
+        if settings.browser_backend == "stub":
+            return StubBrowser()
+        return HttpBrowser(
+            timeout_seconds=settings.browser_timeout_seconds,
+            max_content_chars=settings.browser_max_content_chars,
+        )
+
+    @staticmethod
+    def _build_search_engine(settings: Settings) -> SearchEnginePort:
+        """按配置装配搜索引擎（默认百度自研实现）。"""
+        if settings.search_engine == "mock":
+            return MockSearchEngine()
+        return BaiduSearchEngine(
+            max_results=settings.search_max_results,
+            timeout_seconds=settings.search_timeout_seconds,
+        )
 
 
 def build_container(settings: Settings) -> Container:

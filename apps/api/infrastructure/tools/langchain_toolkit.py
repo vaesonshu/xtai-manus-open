@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from typing import Any
 
@@ -55,12 +56,66 @@ class LangChainToolKit:
         filtered = filter_tool_arguments(tool, arguments)
         try:
             raw_result = await tool.ainvoke(filtered)
-            message = str(raw_result)
-            return ToolResult(
-                success=True,
-                message=message,
-                data={"result": raw_result},
-            )
+            return _coerce_tool_result(raw_result)
         except Exception as exc:  # noqa: BLE001
             logger.exception("LangChain 工具调用失败: %s", function_name)
             return ToolResult(success=False, message=str(exc))
+
+
+def _coerce_tool_result(raw_result: Any) -> ToolResult:
+    """将 LangChain 工具返回值还原为 ``ToolResult``。
+
+    多数工具通过 ``ToolResult.to_tool_content()`` 返回 JSON 字符串。
+    若原样塞进 ``message``，``data.results`` 等结构化字段会丢失，
+    前端就只能把整段 JSON 当纯文本展示。
+    """
+    if isinstance(raw_result, ToolResult):
+        return raw_result
+
+    if isinstance(raw_result, dict):
+        parsed = _payload_to_tool_result(raw_result)
+        if parsed is not None:
+            return parsed
+        return ToolResult(
+            success=True,
+            message=str(raw_result),
+            data={"result": raw_result},
+        )
+
+    if isinstance(raw_result, str):
+        parsed = _parse_tool_payload(raw_result)
+        if parsed is not None:
+            return parsed
+        return ToolResult(success=True, message=raw_result)
+
+    return ToolResult(
+        success=True,
+        message=str(raw_result),
+        data={"result": raw_result},
+    )
+
+
+def _parse_tool_payload(raw: str) -> ToolResult | None:
+    """尝试把 ``to_tool_content()`` JSON 还原为 ToolResult。"""
+    trimmed = raw.strip()
+    if not trimmed.startswith("{") and not trimmed.startswith("["):
+        return None
+    try:
+        payload = json.loads(trimmed)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(payload, dict):
+        return None
+    return _payload_to_tool_result(payload)
+
+
+def _payload_to_tool_result(payload: dict[str, Any]) -> ToolResult | None:
+    """仅识别带 success 字段的工具载荷，避免误解析普通 JSON。"""
+    if "success" not in payload:
+        return None
+    data = payload.get("data")
+    return ToolResult(
+        success=bool(payload.get("success")),
+        message=str(payload.get("message") or ""),
+        data=data if isinstance(data, dict) else None,
+    )

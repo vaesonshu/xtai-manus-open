@@ -59,6 +59,12 @@ export interface TaskResponse {
   error?: string | null
 }
 
+export interface SearchResultItem {
+  title: string
+  url: string
+  snippet: string
+}
+
 export interface ToolContent {
   type?: "browser" | "file" | "shell" | "search"
   screenshot?: string
@@ -66,6 +72,16 @@ export interface ToolContent {
   path?: string
   operation?: "read" | "write" | "replace"
   success?: boolean
+  /** 搜索工具：查询词 */
+  query?: string
+  /** 搜索工具：提供方（如 baidu） */
+  provider?: string
+  /** 搜索工具：结构化结果列表 */
+  items?: SearchResultItem[]
+  /** 浏览器工具：当前页 URL */
+  url?: string
+  /** 浏览器工具：页面标题 */
+  title?: string
 }
 
 export interface StreamEvent {

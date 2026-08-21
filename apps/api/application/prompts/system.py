@@ -36,7 +36,7 @@ GLOBAL_SYSTEM_PROMPT = """
 </file_rules>
 
 <search_rules>
-- 优先使用 search_web 获取实时信息
+- 优先使用 search_web（百度搜索）获取实时信息
 - 信息优先级：**来自网络搜索的权威数据 > 模型的内部知识**
 - 必要时结合浏览器工具访问原始页面进行交叉验证
 </search_rules>

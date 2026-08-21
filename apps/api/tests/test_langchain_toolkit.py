@@ -27,6 +27,47 @@ async def test_langchain_toolkit_invoke_echo() -> None:
 
 
 @pytest.mark.asyncio
+async def test_langchain_toolkit_unwraps_tool_result_json() -> None:
+    """工具若返回 to_tool_content() JSON，invoke 应还原结构化 data，避免前端只能展示整段 JSON。"""
+
+    @tool
+    async def search_like() -> str:
+        """模拟搜索工具返回。"""
+        return ToolResult(
+            success=True,
+            message="共 1 条结果",
+            data={
+                "query": "北京",
+                "provider": "baidu",
+                "results": [
+                    {
+                        "title": "北京旅游",
+                        "url": "https://example.com",
+                        "snippet": "必去景点",
+                    }
+                ],
+            },
+        ).to_tool_content()
+
+    toolkit = LangChainToolKit(name="search-like", tools=[search_like])
+    result = await toolkit.invoke("search_like", {})
+
+    assert result.success is True
+    assert result.message == "共 1 条结果"
+    assert result.data == {
+        "query": "北京",
+        "provider": "baidu",
+        "results": [
+            {
+                "title": "北京旅游",
+                "url": "https://example.com",
+                "snippet": "必去景点",
+            }
+        ],
+    }
+
+
+@pytest.mark.asyncio
 async def test_langchain_toolkit_filters_hallucinated_arguments() -> None:
     toolkit = LangChainToolKit(name="math", tools=[add])
     result = await toolkit.invoke(

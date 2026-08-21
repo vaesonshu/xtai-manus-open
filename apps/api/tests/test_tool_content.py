@@ -25,6 +25,33 @@ def test_build_browser_tool_content_fallback_to_message() -> None:
         "type": "browser",
         "content": "Example Domain",
         "success": True,
+        "url": "https://example.com",
+        "title": "",
+    }
+
+
+def test_build_browser_tool_content_from_page_data() -> None:
+    """navigate 结果应下发 url/title/正文，供前端做页面预览而不是 JSON 原文。"""
+    result = ToolResult(
+        success=True,
+        message="已打开: 北京中轴线\nURL: https://example.com/article\n\n永定门是起点。",
+        data={
+            "url": "https://example.com/article",
+            "title": "北京中轴线",
+            "content": "永定门是起点。",
+        },
+    )
+    content = build_tool_content(
+        "browser_navigate",
+        {"url": "https://example.com/article"},
+        result,
+    )
+    assert content == {
+        "type": "browser",
+        "success": True,
+        "url": "https://example.com/article",
+        "title": "北京中轴线",
+        "content": "永定门是起点。",
     }
 
 
@@ -57,6 +84,41 @@ def test_build_file_write_tool_content() -> None:
         "path": "out.md",
         "content": "written: out.md",
         "success": True,
+    }
+
+
+def test_build_search_tool_content() -> None:
+    result = ToolResult(
+        success=True,
+        message="百度搜索「北京 交通」共 2 条结果",
+        data={
+            "query": "北京 交通",
+            "provider": "baidu",
+            "results": [
+                {
+                    "title": "北京交通指南",
+                    "url": "https://example.com/guide",
+                    "snippet": "地铁与公交出行建议",
+                },
+                {"title": "无链接结果", "url": "", "snippet": ""},
+            ],
+        },
+    )
+    content = build_tool_content("search_web", {"query": "北京 交通"}, result)
+    assert content == {
+        "type": "search",
+        "success": True,
+        "content": "百度搜索「北京 交通」共 2 条结果",
+        "query": "北京 交通",
+        "provider": "baidu",
+        "items": [
+            {
+                "title": "北京交通指南",
+                "url": "https://example.com/guide",
+                "snippet": "地铁与公交出行建议",
+            },
+            {"title": "无链接结果", "url": "", "snippet": ""},
+        ],
     }
 
 

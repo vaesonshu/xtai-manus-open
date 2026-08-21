@@ -13,13 +13,13 @@ def build_browser_toolkit(browser: BrowserPort) -> LangChainToolKit:
 
     @tool
     async def browser_view() -> str:
-        """查看当前浏览器页面内容。"""
+        """查看当前浏览器页面正文（需先 browser_navigate 打开页面）。"""
         result = await browser.view_page()
         return result.to_tool_content()
 
     @tool
     async def browser_navigate(url: str) -> str:
-        """将浏览器导航至指定 URL。"""
+        """打开指定 URL 并返回页面正文（HTTP 抓取 HTML，无需 Playwright）。"""
         result = await browser.navigate(url)
         return result.to_tool_content()
 

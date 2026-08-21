@@ -69,6 +69,16 @@ class Settings(BaseSettings):
     # Storage
     data_dir: str = "./data"
 
+    # Web 搜索：默认使用自研百度抓取实现
+    search_engine: Literal["mock", "baidu"] = "baidu"
+    search_max_results: int = 8
+    search_timeout_seconds: float = 15.0
+
+    # 浏览器：默认 HTTP 轻量实现（抓取 HTML 正文）
+    browser_backend: Literal["stub", "http"] = "http"
+    browser_timeout_seconds: float = 20.0
+    browser_max_content_chars: int = 12000
+
     # Redis 缓存
     redis_enabled: bool = True
     redis_url: str = "redis://localhost:6379/0"

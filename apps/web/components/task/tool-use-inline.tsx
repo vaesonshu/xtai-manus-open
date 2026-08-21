@@ -1,6 +1,6 @@
 "use client"
 
-import type { ToolRecord } from "@/lib/types"
+import type { ToolContent, ToolRecord } from "@/lib/types"
 import {
   formatToolArgs,
   formatToolResultSummary,
@@ -8,9 +8,12 @@ import {
   getStepToolLabel,
   getToolPanelTitle,
   getToolStatusLabel,
+  isBrowserTool,
   isSearchTool,
+  parseBrowserToolResult,
   parseSearchToolResult,
   pickToolIcon,
+  type ParsedBrowserToolResult,
   type SearchResultItem,
 } from "@/lib/tool-display"
 import { Badge } from "@workspace/ui/components/badge"
@@ -243,7 +246,11 @@ function SearchResultBody({
         )}
       >
         {parsed.items.map((item, index) => (
-          <SearchResultCard key={`${item.url}-${index}`} item={item} />
+          <SearchResultCard
+            key={`${item.url}-${index}`}
+            item={item}
+            index={index}
+          />
         ))}
       </ul>
     )
@@ -269,28 +276,47 @@ function SearchResultBody({
   )
 }
 
-function SearchResultCard({ item }: { item: SearchResultItem }) {
+function SearchResultCard({
+  item,
+  index,
+}: {
+  item: SearchResultItem
+  index: number
+}) {
   return (
     <li className="rounded-lg border bg-background p-3 text-sm">
-      <div className="mb-1 flex items-start justify-between gap-2">
-        <p className="leading-snug font-medium">{item.title}</p>
-        {item.url ? (
-          <a
-            href={item.url}
-            target="_blank"
-            rel="noreferrer"
-            className="shrink-0 text-muted-foreground hover:text-primary"
-            aria-label="打开链接"
-          >
-            <ExternalLink className="size-3.5" />
-          </a>
-        ) : null}
+      <div className="mb-1 flex items-start gap-2">
+        <span className="mt-0.5 shrink-0 text-xs font-medium text-muted-foreground">
+          {index + 1}.
+        </span>
+        <div className="min-w-0 flex-1">
+          {item.url ? (
+            <a
+              href={item.url}
+              target="_blank"
+              rel="noreferrer"
+              className="group inline-flex items-start gap-1.5 leading-snug font-medium text-primary hover:underline"
+            >
+              <span className="min-w-0">{item.title}</span>
+              <ExternalLink className="mt-0.5 size-3.5 shrink-0 opacity-70 group-hover:opacity-100" />
+            </a>
+          ) : (
+            <p className="leading-snug font-medium">{item.title}</p>
+          )}
+          {item.url ? (
+            <a
+              href={item.url}
+              target="_blank"
+              rel="noreferrer"
+              className="mt-1 block truncate text-xs text-muted-foreground hover:text-primary"
+            >
+              {item.url}
+            </a>
+          ) : null}
+        </div>
       </div>
-      {item.url ? (
-        <p className="mb-1 truncate text-xs text-primary/80">{item.url}</p>
-      ) : null}
       {item.snippet ? (
-        <p className="line-clamp-3 text-xs leading-relaxed text-muted-foreground">
+        <p className="line-clamp-3 pl-5 text-xs leading-relaxed text-muted-foreground">
           {item.snippet}
         </p>
       ) : null}
@@ -299,6 +325,136 @@ function SearchResultCard({ item }: { item: SearchResultItem }) {
 }
 
 export { getToolPanelTitle, getToolStatusLabel, pickToolIcon }
+
+/** 将后端 search 类型 tool_content 转为前端可渲染结构 */
+function parsedSearchFromToolContent(
+  content: ToolContent
+): ReturnType<typeof parseSearchToolResult> {
+  const items = (content.items ?? []).map((item) => ({
+    title: item.title || "无标题",
+    url: item.url ?? "",
+    snippet: item.snippet ?? "",
+  }))
+
+  // items 为空时，content 可能仍是整段 JSON，回退解析以免展示原始字符串
+  if (items.length === 0 && content.content) {
+    const nested = parseSearchToolResult(content.content)
+    if (nested.items.length > 0) {
+      return nested
+    }
+  }
+
+  return {
+    success: content.success !== false,
+    message: content.content ?? "",
+    query: content.query,
+    items,
+    usedBaiduFallback: (content.content ?? "").includes("自动改用百度"),
+  }
+}
+
+/** 将后端 browser 类型 tool_content 转为页面预览结构 */
+function parsedBrowserFromToolContent(
+  content: ToolContent
+): ParsedBrowserToolResult {
+  const parsed: ParsedBrowserToolResult = {
+    success: content.success !== false,
+    message: content.content ?? "",
+    url: content.url ?? "",
+    title: content.title ?? "",
+    content: content.content ?? "",
+    screenshot: content.screenshot,
+  }
+
+  // 正文仍是整段 JSON 时，拆出 title/url/content
+  const raw = parsed.content.trim()
+  if (raw.startsWith("{") && !parsed.title) {
+    const nested = parseBrowserToolResult(raw)
+    if (nested.title || nested.url || nested.content) {
+      return nested
+    }
+  }
+
+  return parsed
+}
+
+function BrowserPageView({
+  parsed,
+  fillHeight = false,
+}: {
+  parsed: ParsedBrowserToolResult
+  fillHeight?: boolean
+}) {
+  if (!parsed.success) {
+    return (
+      <p className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+        {parsed.message || "打开页面失败"}
+      </p>
+    )
+  }
+
+  if (parsed.screenshot) {
+    return (
+      <img
+        src={
+          parsed.screenshot.startsWith("data:")
+            ? parsed.screenshot
+            : `data:image/png;base64,${parsed.screenshot}`
+        }
+        alt={parsed.title || "浏览器截图"}
+        className={cn(
+          "rounded-lg border bg-background object-contain",
+          fillHeight ? "max-h-full w-full" : "max-h-64 w-full"
+        )}
+      />
+    )
+  }
+
+  const heading = parsed.title || parsed.url || "页面内容"
+
+  return (
+    <article
+      className={cn(
+        "flex min-h-0 flex-col gap-2",
+        fillHeight ? "h-full" : undefined
+      )}
+    >
+      <div className="shrink-0 rounded-lg border bg-background px-3 py-2">
+        {parsed.url ? (
+          <a
+            href={parsed.url}
+            target="_blank"
+            rel="noreferrer"
+            className="group inline-flex items-start gap-1.5 text-sm font-medium text-primary hover:underline"
+          >
+            <span className="min-w-0">{heading}</span>
+            <ExternalLink className="mt-0.5 size-3.5 shrink-0 opacity-70 group-hover:opacity-100" />
+          </a>
+        ) : (
+          <p className="text-sm font-medium">{heading}</p>
+        )}
+        {parsed.url ? (
+          <a
+            href={parsed.url}
+            target="_blank"
+            rel="noreferrer"
+            className="mt-1 block truncate text-xs text-muted-foreground hover:text-primary"
+          >
+            {parsed.url}
+          </a>
+        ) : null}
+      </div>
+      <div
+        className={cn(
+          "overflow-auto rounded-lg border bg-muted/20 p-3 text-sm leading-relaxed wrap-break-word whitespace-pre-wrap",
+          fillHeight ? "min-h-0 flex-1" : "max-h-64"
+        )}
+      >
+        {parsed.content || parsed.message || "(页面无可见文本)"}
+      </div>
+    </article>
+  )
+}
 
 /** 工具结果区：优先结构化 toolContent，回退 function_result 解析 */
 function ToolResultBody({
@@ -311,35 +467,35 @@ function ToolResultBody({
   const content = tool.toolContent
   const summary = formatToolResultSummary(tool)
 
-  if (content?.type === "browser") {
-    if (content.screenshot) {
+  if (content?.type === "search") {
+    const parsed = parsedSearchFromToolContent(content)
+    // 结构化 items 缺失时，回退解析 function_result，避免把 JSON 当纯文本
+    if (parsed.items.length === 0 && tool.result != null) {
+      return <SearchResultView result={tool.result} fillHeight={fillHeight} />
+    }
+    return <SearchResultBody parsed={parsed} fillHeight={fillHeight} />
+  }
+
+  if (content?.type === "browser" || isBrowserTool(tool.functionName)) {
+    const parsed =
+      content?.type === "browser"
+        ? parsedBrowserFromToolContent(content)
+        : parseBrowserToolResult(tool.result)
+    // 结构化字段缺失时，回退解析 function_result，避免把 JSON 当纯文本
+    if (
+      content?.type === "browser" &&
+      !parsed.title &&
+      !parsed.url &&
+      tool.result != null
+    ) {
       return (
-        <img
-          src={
-            content.screenshot.startsWith("data:")
-              ? content.screenshot
-              : `data:image/png;base64,${content.screenshot}`
-          }
-          alt="浏览器截图"
-          className={cn(
-            "rounded-lg border bg-background object-contain",
-            fillHeight ? "max-h-full w-full" : "max-h-64 w-full"
-          )}
+        <BrowserPageView
+          parsed={parseBrowserToolResult(tool.result)}
+          fillHeight={fillHeight}
         />
       )
     }
-    if (content.content) {
-      return (
-        <pre
-          className={cn(
-            "overflow-auto rounded-lg border bg-muted/40 p-3 text-sm break-all whitespace-pre-wrap",
-            fillHeight ? "min-h-full" : "max-h-64"
-          )}
-        >
-          {content.content}
-        </pre>
-      )
-    }
+    return <BrowserPageView parsed={parsed} fillHeight={fillHeight} />
   }
 
   if (content?.type === "file") {

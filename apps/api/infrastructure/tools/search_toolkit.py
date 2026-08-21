@@ -15,7 +15,7 @@ def build_search_toolkit(search_engine: SearchEnginePort) -> LangChainToolKit:
 
     @tool
     async def search_web(query: str, date_range: Optional[str] = None) -> str:
-        """全网搜索引擎工具。用于获取实时信息、补充知识或事实核查。"""
+        """使用百度搜索引擎检索实时信息。适用于事实核查、新闻、文档与公开资料查询。"""
         result = await search_engine.search_web(query, date_range=date_range)
         return result.to_tool_content()
 
