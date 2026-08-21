@@ -24,21 +24,40 @@ export function loadTaskSessions(): TaskSessionMeta[] {
 }
 
 /** 写入或更新任务元数据 */
-export function upsertTaskSession(meta: TaskSessionMeta): void {
+export function upsertTaskSession(
+  meta: TaskSessionMeta,
+  options?: { bumpUpdatedAt?: boolean }
+): void {
   if (typeof window === "undefined") {
     return
   }
 
-  const sessions = loadTaskSessions().filter(
-    (item) => item.taskId !== meta.taskId
-  )
-  sessions.unshift(meta)
+  const sessions = loadTaskSessions()
+  const existing = sessions.find((item) => item.taskId === meta.taskId)
+  const filtered = sessions.filter((item) => item.taskId !== meta.taskId)
+
+  const bumpUpdatedAt = options?.bumpUpdatedAt ?? true
+  const updatedAt = bumpUpdatedAt
+    ? meta.updatedAt || new Date().toISOString()
+    : existing?.updatedAt || meta.updatedAt || new Date().toISOString()
+
+  const merged: TaskSessionMeta = {
+    ...meta,
+    updatedAt,
+  }
+
+  // 不在此处 unshift：顺序由 updatedAt 决定，避免仅查看任务时被顶到最前
+  filtered.push(merged)
+
+  const limited = filtered
+    .sort(
+      (a, b) =>
+        new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+    )
+    .slice(0, 50)
 
   try {
-    localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify(sessions.slice(0, 50))
-    )
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(limited))
   } catch {
     // 隐私模式或配额不足时静默失败
   }
@@ -50,9 +69,7 @@ export function removeTaskSession(taskId: string): void {
     return
   }
 
-  const sessions = loadTaskSessions().filter(
-    (item) => item.taskId !== taskId
-  )
+  const sessions = loadTaskSessions().filter((item) => item.taskId !== taskId)
 
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(sessions))

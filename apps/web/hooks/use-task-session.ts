@@ -13,10 +13,7 @@ import {
   loadTaskSessions,
   upsertTaskSession,
 } from "@/lib/task-storage"
-import {
-  initialTaskUiState,
-  taskReducer,
-} from "@/lib/task-reducer"
+import { initialTaskUiState, taskReducer } from "@/lib/task-reducer"
 import type { StreamEvent, TaskSessionMeta } from "@/lib/types"
 
 /** 任务会话 hook：封装创建、SSE 订阅、回复与本地持久化 */
@@ -36,13 +33,18 @@ export function useTaskSession(taskId: string | null) {
   }, [])
 
   const persistMeta = useCallback(
-    (next: {
-      taskId: string
-      goal: string
-      title?: string
-      status: typeof state.status
-    }) => {
-      upsertTaskSession(buildTaskMeta(next))
+    (
+      next: {
+        taskId: string
+        goal: string
+        title?: string
+        status: typeof state.status
+      },
+      options?: { bumpUpdatedAt?: boolean }
+    ) => {
+      upsertTaskSession(buildTaskMeta(next), {
+        bumpUpdatedAt: options?.bumpUpdatedAt ?? true,
+      })
       refreshSessions()
     },
     [refreshSessions]
@@ -104,12 +106,6 @@ export function useTaskSession(taskId: string | null) {
         }
 
         dispatch({ type: "HYDRATE_TASK", task })
-        persistMeta({
-          taskId: task.task_id,
-          goal: task.goal,
-          title: task.plan?.title,
-          status: task.status,
-        })
       } catch {
         if (!cancelled) {
           dispatch({
@@ -132,19 +128,39 @@ export function useTaskSession(taskId: string | null) {
     }
   }, [resolvedTaskId, isPendingCreate, connectStream, persistMeta])
 
-  /** 状态变化时同步本地列表 */
+  /** 状态变化时同步本地列表（仅在有实质更新或执行中时提升排序） */
   useEffect(() => {
     if (!state.taskId) {
       return
     }
 
-    persistMeta({
-      taskId: state.taskId,
-      goal: state.goal,
-      title: state.title,
-      status: state.status,
-    })
-  }, [state.taskId, state.goal, state.title, state.status, persistMeta])
+    const existing = loadTaskSessions().find(
+      (item) => item.taskId === state.taskId
+    )
+    const metadataChanged =
+      existing != null &&
+      (existing.status !== state.status ||
+        (state.title && existing.title !== state.title))
+
+    persistMeta(
+      {
+        taskId: state.taskId,
+        goal: state.goal,
+        title: state.title,
+        status: state.status,
+      },
+      {
+        bumpUpdatedAt: state.isStreaming || metadataChanged,
+      }
+    )
+  }, [
+    state.taskId,
+    state.goal,
+    state.title,
+    state.status,
+    state.isStreaming,
+    persistMeta,
+  ])
 
   const startTask = useCallback(
     async (goal: string) => {
@@ -159,11 +175,14 @@ export function useTaskSession(taskId: string | null) {
           status: task.status,
         })
         setSessionTaskId(task.task_id)
-        persistMeta({
-          taskId: task.task_id,
-          goal: task.goal,
-          status: task.status,
-        })
+        persistMeta(
+          {
+            taskId: task.task_id,
+            goal: task.goal,
+            status: task.status,
+          },
+          { bumpUpdatedAt: true }
+        )
         return task.task_id
       } catch (error) {
         dispatch({
