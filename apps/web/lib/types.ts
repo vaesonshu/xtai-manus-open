@@ -84,6 +84,7 @@ export interface StreamEvent {
   reason?: string
   question?: string
   tool_call_id?: string
+  step_id?: string
   tool_name?: string
   function_name?: string
   function_args?: Record<string, unknown>
@@ -140,6 +141,18 @@ export interface TaskSessionMeta {
   updatedAt: string
 }
 
+/** 步骤卡片内嵌的工具调用（消息区只展示调用，不含结果） */
+export interface StepToolCall {
+  toolCallId: string
+  toolName: string
+  functionName: string
+  status: "calling" | "called"
+  args?: Record<string, unknown>
+  result?: unknown
+  toolContent?: ToolContent
+  createdAt?: string
+}
+
 /** 时间线条目：混排消息、步骤、工具 */
 export type TimelineItem =
   | {
@@ -155,6 +168,7 @@ export type TimelineItem =
       kind: "step"
       step: TaskStep
       eventStatus: string
+      toolCalls?: StepToolCall[]
       createdAt?: string
     }
   | {
@@ -178,6 +192,7 @@ export type TimelineItem =
 
 export interface ToolRecord {
   id: string
+  stepId?: string
   toolName: string
   functionName: string
   status: "calling" | "called"

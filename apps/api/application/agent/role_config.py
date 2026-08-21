@@ -17,6 +17,8 @@ _RESEARCHER_TOOLS = _INTERACTION_TOOLS + (
     "find_files",
     "browser_view",
     "browser_navigate",
+    "calculate",
+    "get_current_time",
 )
 _CODER_TOOLS = _INTERACTION_TOOLS + (
     "read_file",
@@ -26,6 +28,8 @@ _CODER_TOOLS = _INTERACTION_TOOLS + (
     "find_files",
     "shell_execute",
     "shell_read_output",
+    "calculate",
+    "get_current_time",
 )
 _EXECUTOR_TOOLS = _CODER_TOOLS + ("search_web", "echo")
 
@@ -42,12 +46,12 @@ class RoleConfig:
 
 ROLE_CONFIG: dict[AgentRole, RoleConfig] = {
     AgentRole.RESEARCHER: RoleConfig(
-        system_prompt=_BASE_SYSTEM + "你擅长信息收集与调研，优先使用搜索与文件工具。",
+        system_prompt=_BASE_SYSTEM + "你擅长信息收集与调研，优先使用搜索与文件工具。涉及运算必须调用 calculate，需要当前时间必须调用 get_current_time。",
         tool_names=_RESEARCHER_TOOLS,
         response_format=JSON_RESPONSE_FORMAT,
     ),
     AgentRole.CODER: RoleConfig(
-        system_prompt=_BASE_SYSTEM + "你擅长整理方案与生成可交付内容，可使用文件与 Shell 工具。",
+        system_prompt=_BASE_SYSTEM + "你擅长整理方案与生成可交付内容，可使用文件与 Shell 工具。涉及运算必须调用 calculate，需要当前时间必须调用 get_current_time。",
         tool_names=_CODER_TOOLS,
         response_format=JSON_RESPONSE_FORMAT,
     ),
@@ -58,7 +62,8 @@ ROLE_CONFIG: dict[AgentRole, RoleConfig] = {
         tool_choice="none",
     ),
     AgentRole.EXECUTOR: RoleConfig(
-        system_prompt=_BASE_SYSTEM,
+        system_prompt=_BASE_SYSTEM
+        + "你负责执行具体任务；涉及数学运算时必须调用 calculate，需要当前时间必须调用 get_current_time，不要心算或猜测时间。",
         tool_names=_EXECUTOR_TOOLS,
         response_format=JSON_RESPONSE_FORMAT,
     ),

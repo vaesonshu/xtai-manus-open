@@ -71,7 +71,7 @@ cp .env.example .env
 uv run alembic upgrade head
 
 # 5. 启动开发服务器
-uv run uvicorn main:app --reload
+uv run alembic upgrade head
 ```
 
 启动后访问：

@@ -1,37 +1,74 @@
 "use client"
 
-import { useState } from "react"
+import { useMemo } from "react"
 
 import { MarkdownContent } from "@/components/task/markdown-content"
-import { ToolUseInline } from "@/components/task/tool-use-inline"
-import type { TimelineItem, ToolRecord } from "@/lib/types"
+import { StepToolUseInline } from "@/components/task/tool-use-inline"
+import type { StepToolCall, TimelineItem, ToolRecord } from "@/lib/types"
 import { Badge } from "@workspace/ui/components/badge"
 import { cn } from "@workspace/ui/lib/utils"
-import {
-  AlertCircle,
-  Bot,
-  CheckIcon,
-  ChevronDown,
-  Info,
-} from "lucide-react"
+import { AlertCircle, Bot, CheckIcon, Info } from "lucide-react"
 
 export interface TaskMessageProps {
   className?: string
   item: TimelineItem
+  tools?: ToolRecord[]
   onToolClick?: (tool: ToolRecord) => void
   selectedToolId?: string | null
 }
 
-function timelineToolToRecord(
-  item: Extract<TimelineItem, { kind: "tool" }>
+function mergeStepDisplayTools(
+  stepCalls: StepToolCall[],
+  stepId: string,
+  allTools: ToolRecord[],
+  includeOrphans: boolean
+): StepToolCall[] {
+  const merged = new Map<string, StepToolCall>()
+
+  for (const item of stepCalls) {
+    merged.set(item.toolCallId, item)
+  }
+
+  for (const tool of allTools) {
+    const belongsToStep = tool.stepId === stepId
+    const orphanWhileRunning = includeOrphans && !tool.stepId
+    if (!belongsToStep && !orphanWhileRunning) {
+      continue
+    }
+
+    const next: StepToolCall = {
+      toolCallId: tool.id,
+      toolName: tool.toolName,
+      functionName: tool.functionName,
+      status: tool.status,
+      args: tool.args,
+      result: tool.result,
+      toolContent: tool.toolContent,
+    }
+    const previous = merged.get(tool.id)
+    merged.set(tool.id, previous ? { ...previous, ...next } : next)
+  }
+
+  return Array.from(merged.values())
+}
+
+function resolveStepToolRecord(
+  tool: StepToolCall,
+  allTools: ToolRecord[]
 ): ToolRecord {
+  const full = allTools.find((entry) => entry.id === tool.toolCallId)
+  if (full) {
+    return full
+  }
+
   return {
-    id: item.toolCallId,
-    toolName: item.toolName,
-    functionName: item.functionName,
-    status: item.status,
-    args: item.args,
-    result: item.result,
+    id: tool.toolCallId,
+    toolName: tool.toolName,
+    functionName: tool.functionName,
+    status: tool.status,
+    args: tool.args,
+    result: tool.result,
+    toolContent: tool.toolContent,
   }
 }
 
@@ -39,6 +76,7 @@ function timelineToolToRecord(
 export function TaskMessage({
   className,
   item,
+  tools = [],
   onToolClick,
   selectedToolId,
 }: TaskMessageProps) {
@@ -86,21 +124,18 @@ export function TaskMessage({
   }
 
   if (item.kind === "tool") {
-    const tool = timelineToolToRecord(item)
-    return (
-      <div className={cn("mt-3 flex w-full min-w-0 items-center", className)}>
-        <ToolUseInline
-          tool={tool}
-          selected={item.toolCallId === selectedToolId}
-          onClick={onToolClick ? () => onToolClick(tool) : undefined}
-        />
-      </div>
-    )
+    return null
   }
 
   if (item.kind === "step") {
     return (
-      <StepBlock stepItem={item} className={className} />
+      <StepBlock
+        stepItem={item}
+        className={className}
+        tools={tools}
+        onToolClick={onToolClick}
+        selectedToolId={selectedToolId}
+      />
     )
   }
 
@@ -132,37 +167,34 @@ export function TaskMessage({
 function StepBlock({
   stepItem,
   className,
+  tools,
+  onToolClick,
+  selectedToolId,
 }: {
   stepItem: Extract<TimelineItem, { kind: "step" }>
   className?: string
+  tools: ToolRecord[]
+  onToolClick?: (tool: ToolRecord) => void
+  selectedToolId?: string | null
 }) {
-  const [expanded, setExpanded] = useState(true)
-  const { step, eventStatus } = stepItem
+  const { step, eventStatus, toolCalls = [] } = stepItem
   const isRunning =
     eventStatus === "started" ||
     step.status === "running" ||
     step.status === "started"
   const isFailed = step.status === "failed" || eventStatus === "failed"
-  const isCompleted =
-    eventStatus === "completed" ||
-    step.status === "completed" ||
-    Boolean(step.success)
-  const displayResult = step.result?.trim() ?? ""
-  const hasResult = Boolean(displayResult)
   const hasError = Boolean(step.error?.trim())
-  // 完成后具体输出由同一段内的工具 / 助手消息展示，步骤卡片只保留标题与状态
-  const showResultBody = hasResult && !isCompleted
-  const hasBody = showResultBody || hasError || isRunning
+  const displayTools = useMemo(
+    () => mergeStepDisplayTools(toolCalls, step.step_id, tools, isRunning),
+    [toolCalls, step.step_id, tools, isRunning]
+  )
+  const hasToolCalls = displayTools.length > 0
+  const showToolArea = hasToolCalls || isRunning
 
   return (
     <div className={cn("mt-3 flex flex-col", className)}>
-      <button
-        type="button"
-        aria-expanded={expanded}
-        onClick={() => setExpanded((v) => !v)}
-        className="group/header flex w-full cursor-pointer items-center justify-between gap-2 rounded-md text-sm outline-none transition-colors hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring"
-      >
-        <div className="flex min-w-0 flex-1 flex-row items-center justify-start gap-2">
+      <div className="flex w-full items-center justify-between gap-2 text-sm">
+        <div className="flex min-w-0 flex-1 items-center gap-2">
           <div
             className={cn(
               "flex h-4 w-4 shrink-0 items-center justify-center rounded-full border",
@@ -177,17 +209,7 @@ function StepBlock({
               <CheckIcon className="size-2.5 text-background" />
             )}
           </div>
-          <div className="min-w-0 truncate text-left font-medium">
-            {step.description}
-          </div>
-          {hasBody && (
-            <ChevronDown
-              className={cn(
-                "size-4 shrink-0 text-muted-foreground transition-transform duration-200",
-                expanded && "rotate-180"
-              )}
-            />
-          )}
+          <div className="min-w-0 truncate font-medium">{step.description}</div>
         </div>
         {isRunning && (
           <Badge
@@ -197,43 +219,32 @@ function StepBlock({
             执行中
           </Badge>
         )}
-      </button>
+      </div>
 
-      {hasBody && (
-        <div
-          className={cn(
-            "grid transition-[grid-template-rows] duration-200 ease-out",
-            expanded ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
-          )}
-        >
-          <div className="overflow-hidden">
-            <div className="flex pt-2">
-              <div className="flex min-w-0 flex-1 flex-col gap-3">
-                {isRunning && !showResultBody && (
-                  <p className="text-xs text-muted-foreground">等待工具调用…</p>
-                )}
-
-                {showResultBody && (
-                  <div
-                    className={cn(
-                      "rounded-lg border bg-muted/40 px-3 py-2 text-sm",
-                      isRunning && "animate-pulse"
-                    )}
-                  >
-                    <MarkdownContent content={displayResult} />
-                  </div>
-                )}
-
-                {hasError && (
-                  <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
-                    {step.error}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
+      {showToolArea ? (
+        <div className="ml-3 flex min-w-0 flex-col gap-1.5 border-l-2 border-border/70 py-1.5 pl-3">
+          {displayTools.map((tool) => {
+            const record = resolveStepToolRecord(tool, tools)
+            return (
+              <StepToolUseInline
+                key={tool.toolCallId}
+                tool={record}
+                selected={tool.toolCallId === selectedToolId}
+                onClick={onToolClick ? () => onToolClick(record) : undefined}
+              />
+            )
+          })}
+          {isRunning && !hasToolCalls ? (
+            <p className="text-xs text-muted-foreground">等待工具调用…</p>
+          ) : null}
         </div>
-      )}
+      ) : null}
+
+      {hasError ? (
+        <div className="mt-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+          {step.error}
+        </div>
+      ) : null}
     </div>
   )
 }

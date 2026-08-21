@@ -51,6 +51,7 @@ class MessageStreamEventSchema(_StreamEventBase):
 
 class ToolStreamEventSchema(_StreamEventBase):
     type: Literal["tool"]
+    step_id: str = ""
     tool_call_id: str = ""
     tool_name: str = ""
     function_name: str = ""
@@ -100,4 +101,8 @@ _stream_event_adapter: TypeAdapter[StreamEventPayload] = TypeAdapter(StreamEvent
 def validate_stream_event_payload(payload: dict[str, Any]) -> dict[str, Any]:
     """校验并规范化 SSE 事件载荷；非法事件在边界层拦截。"""
     validated = _stream_event_adapter.validate_python(payload)
-    return validated.model_dump(mode="json", exclude_none=True)
+    result = validated.model_dump(mode="json", exclude_none=True)
+    # 空 step_id 会被 exclude_none 保留为空串；前端依赖该字段挂到步骤下
+    if payload.get("type") == "tool" and payload.get("step_id"):
+        result["step_id"] = str(payload["step_id"])
+    return result

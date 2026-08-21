@@ -39,7 +39,17 @@ def test_validate_wait_event_payload() -> None:
     assert validated["question"] == "请确认"
 
 
-def test_validate_tool_event_with_tool_content() -> None:
+def test_validate_tool_event_preserves_step_id() -> None:
+    payload = tool_called(
+        tool_call_id="c1",
+        tool_name="file",
+        function_name="read_file",
+        function_args={"filepath": "a.txt"},
+        function_result={"success": True},
+        step_id="step-xyz",
+    ).as_dict()
+    validated = validate_stream_event_payload(payload)
+    assert validated["step_id"] == "step-xyz"
     payload = tool_called(
         tool_call_id="c1",
         tool_name="file",

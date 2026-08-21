@@ -281,10 +281,12 @@ async def test_react_executor_message_ask_user_raises_wait() -> None:
 
 @pytest.mark.asyncio
 async def test_react_executor_streams_partial_messages() -> None:
+    """非 JSON 模式（有可用工具）时应推送 partial，最终再推送完整消息。"""
     memory_service = MemoryApplicationService(InMemoryMemoryStoreRepository())
     runtime = ScriptedLlmRuntime(
         ScriptedLlmProvider([{"role": "assistant", "content": "流式回复内容"}])
     )
+    # EXECUTOR 含 echo，MockToolKit 能解析到工具 → 关闭 json_object，允许流式 partial
     executor = _build_executor(
         runtime,
         memory_service,
@@ -304,7 +306,7 @@ async def test_react_executor_streams_partial_messages() -> None:
 
     await executor.invoke(
         task_id=TaskId(),
-        agent_role=AgentRole.RESEARCHER,
+        agent_role=AgentRole.EXECUTOR,
         query="测试流式",
         on_event=on_event,
     )
@@ -313,3 +315,169 @@ async def test_react_executor_streams_partial_messages() -> None:
     assert partial_flags[-1] is False
     assert messages[-1] == "流式回复内容"
     assert len(messages) > 1
+
+
+@pytest.mark.asyncio
+async def test_summarize_does_not_stream_raw_json_partial() -> None:
+    """JSON 汇总只推送解析后的最终 message，避免前端卡住「生成中」原始 JSON。"""
+    memory_service = MemoryApplicationService(InMemoryMemoryStoreRepository())
+    payload = {
+        "message": "当前本地时间为：2026-08-21 12:49:42 中国标准时间。",
+        "attachments": [],
+    }
+    runtime = ScriptedLlmRuntime(
+        ScriptedLlmProvider([{"role": "assistant", "content": json.dumps(payload)}])
+    )
+    executor = _build_executor(
+        runtime,
+        memory_service,
+        ToolRegistry([MockToolKit()]),
+        max_retries=1,
+        retry_interval=0,
+    )
+
+    message_events: list[Any] = []
+
+    async def on_event(event) -> None:
+        if event.type == "message":
+            message_events.append(event)
+
+    result = await executor.summarize(
+        task_id=TaskId(),
+        goal="请告诉我现在的本地时间",
+        on_event=on_event,
+        deliverables="",
+    )
+
+    assert result.message == payload["message"]
+    assert message_events, "应至少推送一条最终助手消息"
+    assert all(not bool(getattr(event, "partial", False)) for event in message_events)
+    assert message_events[-1].message == payload["message"]
+    assert '"attachments"' not in message_events[-1].message
+
+
+@pytest.mark.asyncio
+async def test_react_executor_calculate_fact_overrides_fluff_result() -> None:
+    """calculate 已得出数字时，即使模型 result 写进度废话，仍应交付数字。"""
+    memory_service = MemoryApplicationService(InMemoryMemoryStoreRepository())
+    runtime = ScriptedLlmRuntime(
+        ScriptedLlmProvider(
+            [
+                {
+                    "role": "assistant",
+                    "content": "",
+                    "tool_calls": [
+                        {
+                            "id": "call-calc",
+                            "type": "function",
+                            "function": {
+                                "name": "calculate",
+                                "arguments": json.dumps(
+                                    {"expression": "(123 + 456) * 7"}
+                                ),
+                            },
+                        }
+                    ],
+                },
+                {
+                    "role": "assistant",
+                    "content": json.dumps(
+                        {
+                            "success": True,
+                            "result": "我将使用 calculate 工具计算并返回结果。",
+                            "attachments": [],
+                        }
+                    ),
+                },
+            ]
+        )
+    )
+    from infrastructure.tools.calculator_toolkit import build_calculator_toolkit
+
+    executor = _build_executor(
+        runtime,
+        memory_service,
+        ToolRegistry([build_calculator_toolkit()]),
+        max_retries=1,
+        max_iterations=5,
+        retry_interval=0,
+    )
+
+    messages: list[str] = []
+
+    async def on_event(event) -> None:
+        if event.type == "message" and not getattr(event, "partial", False):
+            messages.append(event.message)
+
+    result = await executor.invoke(
+        task_id=TaskId(),
+        agent_role=AgentRole.EXECUTOR,
+        query="请使用 calculate 计算 (123 + 456) * 7，只返回数字",
+        on_event=on_event,
+    )
+
+    assert result.result == "4053"
+    assert messages == ["4053"]
+
+
+@pytest.mark.asyncio
+async def test_summarize_compact_deliverable_skips_llm_expansion() -> None:
+    """步骤已是短数字时，summarize 直接交付，不再扩写成解释长文。"""
+    memory_service = MemoryApplicationService(InMemoryMemoryStoreRepository())
+    runtime = ScriptedLlmRuntime(
+        ScriptedLlmProvider(
+            [
+                {
+                    "role": "assistant",
+                    "content": json.dumps(
+                        {
+                            "message": "经过计算，结果为 4053。希望对您有帮助！",
+                            "attachments": [],
+                        }
+                    ),
+                }
+            ]
+        )
+    )
+    executor = _build_executor(
+        runtime,
+        memory_service,
+        ToolRegistry([MockToolKit()]),
+        max_retries=1,
+        retry_interval=0,
+    )
+
+    messages: list[str] = []
+
+    async def on_event(event) -> None:
+        if event.type == "message" and not getattr(event, "partial", False):
+            messages.append(event.message)
+
+    result = await executor.summarize(
+        task_id=TaskId(),
+        goal="只返回数字结果",
+        on_event=on_event,
+        deliverables="4053",
+    )
+
+    assert result.message == "4053"
+    assert messages == ["4053"]
+
+
+def test_resolve_summary_keeps_compact_numeric_answer() -> None:
+    """计算结果等短答案不能被更长的步骤废话覆盖。"""
+    resolved = ReActExecutor._resolve_summary_message(
+        "4053",
+        deliverables="我将使用 calculate 工具计算 (123 + 456) * 7，并返回结果。",
+    )
+    assert resolved == "4053"
+
+
+def test_resolve_summary_hollow_falls_back_to_deliverables() -> None:
+    """空话收尾时回退到步骤交付物。"""
+    deliverables = "行程第一天：抵达东京。第二天：浅草寺与晴空塔。" * 3
+    resolved = ReActExecutor._resolve_summary_message(
+        "希望您旅途愉快！",
+        deliverables=deliverables,
+    )
+    assert resolved == deliverables

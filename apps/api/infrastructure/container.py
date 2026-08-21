@@ -49,10 +49,12 @@ from infrastructure.persistence.postgres_repository import PostgresAgentRunRepos
 from infrastructure.persistence.repository import InMemoryAgentRunRepository
 from infrastructure.tools import ToolRegistry, build_mock_toolkit
 from infrastructure.tools.browser_toolkit import build_browser_toolkit
+from infrastructure.tools.calculator_toolkit import build_calculator_toolkit
 from infrastructure.tools.file_toolkit import build_file_toolkit
 from infrastructure.tools.interaction_toolkit import build_interaction_toolkit
 from infrastructure.tools.search_toolkit import build_search_toolkit
 from infrastructure.tools.shell_toolkit import build_shell_toolkit
+from infrastructure.tools.time_toolkit import build_time_toolkit
 from infrastructure.task.task_execution_factory import TaskExecutionFactory
 from infrastructure.langgraph.dependencies import GraphNodeDependencies
 from infrastructure.langgraph.event_emitter import GraphEventEmitter
@@ -120,6 +122,8 @@ class Container:
         tool_registry = ToolRegistry(
             [
                 build_mock_toolkit(),
+                build_calculator_toolkit(),
+                build_time_toolkit(),
                 build_interaction_toolkit(),
                 build_shell_toolkit(sandbox),
                 build_file_toolkit(sandbox),

@@ -13,6 +13,7 @@ from domain.event.status import ToolEventStatus
 class ToolStreamEvent(StreamEvent):
     """工具调用过程事件（calling / called）。"""
 
+    step_id: str = ""
     tool_call_id: str = ""
     tool_name: str = ""
     function_name: str = ""
@@ -29,6 +30,7 @@ class ToolStreamEvent(StreamEvent):
         payload = super().as_dict()
         payload.update(
             {
+                "step_id": self.step_id,
                 "tool_call_id": self.tool_call_id,
                 "tool_name": self.tool_name,
                 "function_name": self.function_name,

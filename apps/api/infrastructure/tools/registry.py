@@ -22,11 +22,18 @@ class ToolRegistry:
         self._rebuild_index()
 
     def get_schemas(self, tool_names: tuple[str, ...]) -> list[dict[str, Any]]:
-        """按工具名收集 schema（工具名对应 ToolPort.name）。"""
+        """按 function 名收集 schema（与 role_config.tool_names 对齐）。"""
+        if not tool_names:
+            return []
+
+        allowed = set(tool_names)
         schemas: list[dict[str, Any]] = []
         for tool in self._tools:
-            if tool.name in tool_names:
-                schemas.extend(tool.get_schemas())
+            for schema in tool.get_schemas():
+                function = schema.get("function", {})
+                name = function.get("name")
+                if name and name in allowed:
+                    schemas.append(schema)
         return schemas
 
     def resolve(self, function_name: str) -> ToolPort:

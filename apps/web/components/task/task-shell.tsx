@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 
 import { PlanStepsBar } from "@/components/task/plan-steps-bar"
 import { TaskComposer } from "@/components/task/task-composer"
@@ -33,8 +33,14 @@ interface TaskShellProps {
 /** Manus 风格主界面：侧栏 + 聊天区 + 工具工作区 */
 export function TaskShell({ taskId = null, onTaskCreated }: TaskShellProps) {
   const isMobile = useIsMobile()
-  const { state, sessions, sessionTaskId, refreshSessions, startTask, sendReply } =
-    useTaskSession(taskId)
+  const {
+    state,
+    sessions,
+    sessionTaskId,
+    refreshSessions,
+    startTask,
+    sendReply,
+  } = useTaskSession(taskId)
 
   const [health, setHealth] = useState<HealthResponse | null>(null)
   const [showToolPanel, setShowToolPanel] = useState(false)
@@ -50,16 +56,39 @@ export function TaskShell({ taskId = null, onTaskCreated }: TaskShellProps) {
     state.tools[state.tools.length - 1]?.id ??
     null
 
+  const toolActivityKey = state.tools
+    .map((tool) => `${tool.id}:${tool.status}`)
+    .join("|")
+  const toolsRef = useRef(state.tools)
+  toolsRef.current = state.tools
+
   useEffect(() => {
     refreshSessions()
   }, [refreshSessions])
 
   useEffect(() => {
-    if (callingToolId) {
-      setSelectedToolId(callingToolId)
-      setShowToolPanel(true)
+    const tools = toolsRef.current
+    if (tools.length === 0) {
+      return
     }
-  }, [callingToolId])
+
+    const callingTool = tools.find((tool) => tool.status === "calling")
+    if (callingTool) {
+      setSelectedToolId(callingTool.id)
+      setShowToolPanel(true)
+      return
+    }
+
+    // 已有工具则打开面板；用户点选过的工具保持选中，实现左右一一对应
+    setShowToolPanel(true)
+    setSelectedToolId((prev) => {
+      if (prev && tools.some((tool) => tool.id === prev)) {
+        return prev
+      }
+      return tools[tools.length - 1]?.id ?? null
+    })
+    // 只依赖固定长度的字符串，避免 React Compiler 把 tools[] 展开进 deps
+  }, [toolActivityKey])
 
   useEffect(() => {
     setSelectedToolId(null)
@@ -113,8 +142,7 @@ export function TaskShell({ taskId = null, onTaskCreated }: TaskShellProps) {
   const composerDisabled =
     Boolean(sessionTaskId) && !canReply && !canStartFollowUp
   const showPlanBar = state.steps.length > 0 || Boolean(state.title)
-  const showWelcome =
-    !sessionTaskId && state.timeline.length === 0 && !creating
+  const showWelcome = !sessionTaskId && state.timeline.length === 0 && !creating
 
   const toolPanelContent = (
     <ToolPanel tools={state.tools} focusedToolId={focusedToolId} />

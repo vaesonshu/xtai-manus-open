@@ -5,6 +5,7 @@ import {
   formatToolArgs,
   formatToolResultSummary,
   getFriendlyToolLabel,
+  getStepToolLabel,
   getToolPanelTitle,
   getToolStatusLabel,
   isSearchTool,
@@ -51,7 +52,7 @@ function ToolBadge({
           : undefined
       }
       className={cn(
-        "inline-flex w-fit min-w-0 max-w-full items-center gap-1.5 rounded-lg border bg-muted/60 px-2.5 py-1 text-sm",
+        "inline-flex w-fit max-w-full min-w-0 items-center gap-1.5 rounded-lg border bg-muted/60 px-2.5 py-1 text-sm",
         onClick && "cursor-pointer transition-colors hover:bg-muted",
         loading && "border-amber-500/40",
         selected && "border-primary/50 bg-primary/5 ring-2 ring-primary/25"
@@ -81,6 +82,52 @@ export function ToolUseInline({ tool, onClick, selected }: ToolUseInlineProps) {
       selected={selected}
       onClick={onClick}
     />
+  )
+}
+
+/** 步骤卡片内工具行：只展示工具名称，点击在右侧面板查看结果 */
+export function StepToolUseInline({
+  tool,
+  onClick,
+  selected,
+}: {
+  tool: ToolRecord
+  onClick?: () => void
+  selected?: boolean
+}) {
+  const Icon = pickToolIcon(tool.functionName)
+  const loading = tool.status === "calling"
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={!onClick}
+      className={cn(
+        "flex min-w-0 items-center gap-1.5 rounded-md px-1 py-0.5 text-left text-xs transition-colors",
+        onClick && "cursor-pointer hover:bg-muted/60",
+        selected && "bg-primary/5 ring-1 ring-primary/25",
+        !onClick && "cursor-default"
+      )}
+    >
+      <span className="shrink-0 text-muted-foreground">
+        {loading ? (
+          <Loader2 size={14} className="animate-spin text-amber-600" />
+        ) : (
+          <Icon size={14} />
+        )}
+      </span>
+      <span
+        className={cn(
+          "truncate",
+          loading
+            ? "text-amber-700 dark:text-amber-300"
+            : "text-muted-foreground"
+        )}
+      >
+        {getStepToolLabel(tool)}
+      </span>
+    </button>
   )
 }
 
@@ -130,7 +177,8 @@ export function ToolDetailView({
           </p>
           <div
             className={cn(
-              fillHeight && "min-h-0 flex-1 overflow-auto rounded-lg border bg-muted/20 p-1"
+              fillHeight &&
+                "min-h-0 flex-1 overflow-auto rounded-lg border bg-muted/20 p-1"
             )}
           >
             <ToolResultBody tool={tool} fillHeight={fillHeight} />
@@ -160,7 +208,12 @@ function SearchResultView({
 
   if (parsed.usedBaiduFallback) {
     return (
-      <div className={cn("space-y-2", fillHeight && "flex h-full min-h-0 flex-col")}>
+      <div
+        className={cn(
+          "space-y-2",
+          fillHeight && "flex h-full min-h-0 flex-col"
+        )}
+      >
         <p className="shrink-0 rounded-md border border-amber-500/30 bg-amber-500/10 px-2.5 py-1.5 text-xs text-amber-700 dark:text-amber-300">
           DuckDuckGo 不可用，已自动改用百度搜索
         </p>
@@ -291,7 +344,12 @@ function ToolResultBody({
 
   if (content?.type === "file") {
     return (
-      <div className={cn("space-y-2", fillHeight && "flex h-full min-h-0 flex-col")}>
+      <div
+        className={cn(
+          "space-y-2",
+          fillHeight && "flex h-full min-h-0 flex-col"
+        )}
+      >
         {content.path ? (
           <p className="shrink-0 truncate text-xs text-muted-foreground">
             {content.path}

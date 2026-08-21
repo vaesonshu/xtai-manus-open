@@ -1,36 +1,30 @@
 "use client"
 
-import {
-  Bot,
-  ListTodo,
-  Map,
-  Sparkles,
-  TrendingUp,
-} from "lucide-react"
+import { Bot, Calculator, Clock, ListTodo, Map } from "lucide-react"
 
 import { TaskComposer } from "@/components/task/task-composer"
 import { cn } from "@workspace/ui/lib/utils"
 
 const suggestions = [
   {
+    icon: Calculator,
+    title: "计算器测试",
+    prompt: "请使用 calculate 工具计算 (123 + 456) * 7，只返回数字结果。",
+  },
+  {
+    icon: Clock,
+    title: "当前时间",
+    prompt: "请使用 get_current_time 工具告诉我现在的本地时间。",
+  },
+  {
     icon: Map,
     title: "规划旅行",
     prompt: "帮我规划一份北京 3 日游行程，包含每日亮点和交通建议。",
   },
   {
-    icon: TrendingUp,
-    title: "数据分析",
-    prompt: "分析一下 2024 年新能源汽车市场趋势，给出 3 条关键结论。",
-  },
-  {
     icon: ListTodo,
     title: "任务拆解",
     prompt: "我要在一周内上线一个 MVP 产品，请帮我拆解执行步骤。",
-  },
-  {
-    icon: Sparkles,
-    title: "快速问答",
-    prompt: "用 echo 工具回复 hello，并简要介绍你能做什么。",
   },
 ]
 
@@ -48,10 +42,7 @@ export function WelcomeScreen({
 }: WelcomeScreenProps) {
   return (
     <div
-      className={cn(
-        "flex min-h-0 flex-1 flex-col overflow-hidden",
-        className
-      )}
+      className={cn("flex min-h-0 flex-1 flex-col overflow-hidden", className)}
     >
       <div className="flex flex-1 flex-col items-center justify-center px-6 py-12">
         <div className="mb-8 flex size-14 items-center justify-center rounded-2xl border bg-card shadow-sm">

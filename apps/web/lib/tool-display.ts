@@ -12,6 +12,7 @@ import {
 
 /** 搜索类工具名称 */
 export const SEARCH_TOOL_NAMES = new Set([
+  "search_web",
   "duckduckgo_search",
   "search_web_zh",
   "search_web_en",
@@ -40,6 +41,30 @@ interface ToolDisplayMeta {
 }
 
 const TOOL_META: Record<string, ToolDisplayMeta> = {
+  search_web: {
+    title: "网络搜索",
+    provider: "搜索引擎",
+    callingVerb: "正在搜索",
+    calledVerb: "搜索完成",
+  },
+  read_file: {
+    title: "读取文件",
+    provider: "文件",
+    callingVerb: "正在读取",
+    calledVerb: "读取完成",
+  },
+  write_file: {
+    title: "写入文件",
+    provider: "文件",
+    callingVerb: "正在写入",
+    calledVerb: "写入完成",
+  },
+  shell_execute: {
+    title: "执行命令",
+    provider: "Shell",
+    callingVerb: "正在执行",
+    calledVerb: "执行完成",
+  },
   duckduckgo_search: {
     title: "网络搜索",
     provider: "DuckDuckGo",
@@ -82,6 +107,17 @@ function getMeta(functionName: string): ToolDisplayMeta | null {
   return TOOL_META[functionName] ?? null
 }
 
+/** 步骤下展示的工具名称（不含参数与结果） */
+export function getToolDisplayName(functionName: string): string {
+  return getMeta(functionName)?.title ?? functionName
+}
+
+/** 步骤卡片内工具行：只说明正在/已使用何种工具 */
+export function getStepToolLabel(tool: ToolRecord): string {
+  const name = getToolDisplayName(tool.functionName)
+  return tool.status === "calling" ? `正在使用 ${name}` : name
+}
+
 function getQuery(args: Record<string, unknown> | undefined): string {
   const query = args?.query
   return typeof query === "string" ? query.trim() : ""
@@ -101,7 +137,7 @@ export function isSearchTool(functionName: string): boolean {
 export function pickToolIcon(name: string): LucideIcon {
   if (name === "calculate") return Calculator
   if (name === "get_current_time") return Clock
-  if (name === "duckduckgo_search") return Globe
+  if (name === "search_web" || name === "duckduckgo_search") return Globe
   if (name === "search_web_zh") return BookOpen
   if (name === "search_web_en") return Languages
   if (isSearchTool(name)) return Search
@@ -202,9 +238,7 @@ function parseSearchItems(data: unknown): SearchResultItem[] {
 }
 
 /** 解析搜索工具返回结果 */
-export function parseSearchToolResult(
-  result: unknown
-): ParsedSearchToolResult {
+export function parseSearchToolResult(result: unknown): ParsedSearchToolResult {
   const record = asRecord(result)
   if (!record) {
     return { success: false, message: "", items: [] }

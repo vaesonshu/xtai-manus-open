@@ -7,6 +7,7 @@ import type {
   TaskUiState,
   TimelineItem,
   ToolRecord,
+  StepToolCall,
 } from "@/lib/types"
 import { mergePlanStep } from "@/lib/plan-steps"
 
@@ -37,7 +38,11 @@ export type TaskAction =
   | { type: "TASK_CREATED"; taskId: string; status?: TaskStatus }
   | { type: "RESET" }
 
-function upsertStep(steps: TaskStep[], step: TaskStep, plan: TaskPlan | null): TaskStep[] {
+function upsertStep(
+  steps: TaskStep[],
+  step: TaskStep,
+  plan: TaskPlan | null
+): TaskStep[] {
   return mergePlanStep(steps, step, plan)
 }
 
@@ -48,6 +53,7 @@ function upsertTool(tools: ToolRecord[], event: StreamEvent): ToolRecord[] {
 
   const record: ToolRecord = {
     id: event.tool_call_id,
+    stepId: event.step_id?.trim() || undefined,
     toolName: event.tool_name ?? "tool",
     functionName: event.function_name ?? "unknown",
     status: event.status === "called" ? "called" : "calling",
@@ -64,6 +70,153 @@ function upsertTool(tools: ToolRecord[], event: StreamEvent): ToolRecord[] {
   const next = [...tools]
   next[index] = { ...next[index], ...record }
   return next
+}
+
+function toolRecordToStepToolCall(tool: ToolRecord): StepToolCall {
+  return {
+    toolCallId: tool.id,
+    toolName: tool.toolName,
+    functionName: tool.functionName,
+    status: tool.status,
+    args: tool.args,
+    result: tool.result,
+    toolContent: tool.toolContent,
+  }
+}
+
+function buildStepToolCall(event: StreamEvent): StepToolCall | null {
+  if (!event.tool_call_id) {
+    return null
+  }
+
+  return {
+    toolCallId: event.tool_call_id,
+    toolName: event.tool_name ?? "tool",
+    functionName: event.function_name ?? "unknown",
+    status: event.status === "called" ? "called" : "calling",
+    args: event.function_args,
+    result: event.function_result,
+    toolContent: event.tool_content,
+    createdAt: event.created_at,
+  }
+}
+
+function mergeStepToolCalls(
+  existing: StepToolCall[] | undefined,
+  incoming: StepToolCall[]
+): StepToolCall[] {
+  const merged = new Map<string, StepToolCall>()
+  for (const item of existing ?? []) {
+    merged.set(item.toolCallId, item)
+  }
+  for (const item of incoming) {
+    const previous = merged.get(item.toolCallId)
+    merged.set(item.toolCallId, previous ? { ...previous, ...item } : item)
+  }
+  return Array.from(merged.values())
+}
+
+function stepToolCallsFromRecords(
+  tools: ToolRecord[],
+  stepId: string
+): StepToolCall[] {
+  return tools
+    .filter((tool) => tool.stepId === stepId)
+    .map(toolRecordToStepToolCall)
+}
+
+function isActiveStepItem(
+  item: Extract<TimelineItem, { kind: "step" }>
+): boolean {
+  return (
+    item.eventStatus === "started" ||
+    item.step.status === "running" ||
+    item.step.status === "started"
+  )
+}
+
+/** 后端未带 step_id 时，回落到当前执行中的步骤，再回落到最近一张步骤卡片 */
+function resolveStepIdForToolEvent(
+  event: StreamEvent,
+  timeline: TimelineItem[]
+): string | undefined {
+  const explicit = event.step_id?.trim()
+  if (explicit) {
+    return explicit
+  }
+
+  for (let i = timeline.length - 1; i >= 0; i -= 1) {
+    const item = timeline[i]
+    if (item?.kind === "step" && isActiveStepItem(item)) {
+      return item.step.step_id
+    }
+  }
+
+  for (let i = timeline.length - 1; i >= 0; i -= 1) {
+    const item = timeline[i]
+    if (item?.kind === "step") {
+      return item.step.step_id
+    }
+  }
+
+  return undefined
+}
+
+/** 将 state.tools 中已归属的工具同步回各步骤卡片 */
+function syncStepToolCalls(
+  timeline: TimelineItem[],
+  tools: ToolRecord[]
+): TimelineItem[] {
+  return timeline.map((item) => {
+    if (item.kind !== "step") {
+      return item
+    }
+
+    const merged = mergeStepToolCalls(
+      item.toolCalls,
+      stepToolCallsFromRecords(tools, item.step.step_id)
+    )
+
+    if (merged.length === 0) {
+      return item
+    }
+
+    return { ...item, toolCalls: merged }
+  })
+}
+
+function attachToolToTimeline(
+  timeline: TimelineItem[],
+  event: StreamEvent,
+  tools: ToolRecord[]
+): TimelineItem[] {
+  const toolCall = buildStepToolCall(event)
+  if (!toolCall) {
+    return timeline
+  }
+
+  const stepId = resolveStepIdForToolEvent(event, timeline)
+  if (!stepId) {
+    return timeline
+  }
+
+  const stepItemId = `step-${stepId}`
+  const stepIndex = timeline.findIndex((entry) => entry.id === stepItemId)
+  if (stepIndex === -1) {
+    return timeline
+  }
+
+  const stepItem = timeline[stepIndex]
+  if (stepItem?.kind !== "step") {
+    return timeline
+  }
+
+  const next = [...timeline]
+  next[stepIndex] = {
+    ...stepItem,
+    toolCalls: mergeStepToolCalls(stepItem.toolCalls, [toolCall]),
+  }
+  return syncStepToolCalls(next, tools)
 }
 
 function upsertTimelineItem(
@@ -114,6 +267,22 @@ function findLastAssistantMessage(
   return null
 }
 
+/** 去掉与最终帧同 stream_id 的「生成中」气泡，避免卡住 partial */
+function dropMatchingPartial(
+  timeline: TimelineItem[],
+  streamId: string
+): TimelineItem[] {
+  return timeline.filter(
+    (entry) =>
+      !(
+        entry.kind === "message" &&
+        entry.role === "assistant" &&
+        entry.partial &&
+        entry.id === streamId
+      )
+  )
+}
+
 /** 合并或追加助手消息，避免逐步执行 + 汇总时重复气泡 */
 function appendAssistantMessage(
   state: TaskUiState,
@@ -128,17 +297,21 @@ function appendAssistantMessage(
     return upsertTimelineItem(state.timeline, item)
   }
 
+  // 最终帧必须先清掉同 stream 的 partial，否则「生成中」会永远挂着
+  const timeline = dropMatchingPartial(state.timeline, item.id)
   const content = item.content.trim()
-  const last = findLastAssistantMessage(state.timeline)
+  const last = findLastAssistantMessage(timeline)
 
-    if (last) {
+  if (last) {
     const previous = last.content.trim()
     if (previous === content) {
-      return state.timeline
+      // 与已有最终消息重复：只丢弃本轮流式气泡，不叠第二条
+      return timeline
     }
     // 最终汇总更长：替换上一条（常见于「请稍等」后被完整行程覆盖）
     if (content.length > previous.length && content.length >= 300) {
-      return upsertTimelineItem(state.timeline, {
+      const withoutLast = timeline.filter((entry) => entry.id !== last.id)
+      return upsertTimelineItem(withoutLast, {
         ...last,
         content: item.content,
         id: item.id,
@@ -148,7 +321,8 @@ function appendAssistantMessage(
     }
     // 汇总消息常包含上一条助手输出，用更长的一条替换而非再叠一条
     if (previous && content.includes(previous)) {
-      return upsertTimelineItem(state.timeline, {
+      const withoutLast = timeline.filter((entry) => entry.id !== last.id)
+      return upsertTimelineItem(withoutLast, {
         ...last,
         content: item.content,
         id: item.id,
@@ -156,27 +330,34 @@ function appendAssistantMessage(
         createdAt: item.createdAt ?? last.createdAt,
       })
     }
-    // 新的汇总比已有交付物短很多：视为空洞收尾，不覆盖完整正文
+    // 短于上一条时：不覆盖长文；但短答案（如 4053）仍追加，空话收尾则丢弃
     if (
       previous.length > content.length * 2 &&
       content.length < 320 &&
       !previous.includes(content.slice(0, Math.min(40, content.length)))
     ) {
-      return state.timeline
+      const isCompactAnswer = content.length <= 80 && /\d/.test(content)
+      const isHollowCloser =
+        content.length < 80 &&
+        /^(已完成|希望|祝您|如有|任务已|好的|完成了)/u.test(content)
+      if (isHollowCloser && !isCompactAnswer) {
+        return timeline
+      }
+      return upsertTimelineItem(timeline, {
+        ...item,
+        partial: false,
+      })
     }
   }
 
-  return upsertTimelineItem(state.timeline, {
+  return upsertTimelineItem(timeline, {
     ...item,
     partial: false,
   })
 }
 
 /** 将 SSE 事件应用到 UI 状态 */
-function applyStreamEvent(
-  state: TaskUiState,
-  event: StreamEvent
-): TaskUiState {
+function applyStreamEvent(state: TaskUiState, event: StreamEvent): TaskUiState {
   const marked = markEventSeen(state, event.id)
   if (marked === null) {
     return state
@@ -213,18 +394,41 @@ function applyStreamEvent(
 
       const steps = upsertStep(state.steps, step, state.plan)
       const eventStatus = event.status ?? step.status
-      // 同一步骤只保留一张卡片，started → completed 原地更新，避免重复块
-      const timeline = upsertTimelineItem(state.timeline, {
-        id: `step-${step.step_id}`,
-        kind: "step",
-        step,
-        eventStatus,
-        createdAt,
-      })
+      const stepItemId = `step-${step.step_id}`
+      const existingStep = state.timeline.find(
+        (entry): entry is Extract<TimelineItem, { kind: "step" }> =>
+          entry.id === stepItemId && entry.kind === "step"
+      )
+      const isActiveStep =
+        eventStatus === "started" ||
+        step.status === "running" ||
+        step.status === "started"
+      // 工具事件可能早于步骤卡片：把尚无归属的工具挂到当前步骤
+      const tools = isActiveStep
+        ? state.tools.map((tool) =>
+            tool.stepId ? tool : { ...tool, stepId: step.step_id }
+          )
+        : state.tools
+      const toolCalls = mergeStepToolCalls(
+        existingStep?.toolCalls,
+        stepToolCallsFromRecords(tools, step.step_id)
+      )
+      const timeline = syncStepToolCalls(
+        upsertTimelineItem(state.timeline, {
+          id: stepItemId,
+          kind: "step",
+          step,
+          eventStatus,
+          toolCalls,
+          createdAt: existingStep?.createdAt ?? createdAt,
+        }),
+        tools
+      )
 
       return {
         ...state,
         steps,
+        tools,
         plan: state.plan ? { ...state.plan, steps } : state.plan,
         timeline,
         status: state.status === "waiting" ? state.status : "running",
@@ -235,8 +439,7 @@ function applyStreamEvent(
       const content = event.message ?? ""
       const role = event.role ?? "assistant"
       const isPartial = Boolean(event.partial)
-      const streamId =
-        event.stream_id ?? state.streamingMessageId ?? event.id
+      const streamId = event.stream_id ?? state.streamingMessageId ?? event.id
 
       if (role === "assistant" && isPartial) {
         if (
@@ -298,23 +501,22 @@ function applyStreamEvent(
     }
 
     case "tool": {
-      const tools = upsertTool(state.tools, event)
-      const toolItem: TimelineItem = {
-        id: `tool-${event.tool_call_id}`,
-        kind: "tool",
-        toolCallId: event.tool_call_id ?? "",
-        toolName: event.tool_name ?? "tool",
-        functionName: event.function_name ?? "unknown",
-        status: event.status === "called" ? "called" : "calling",
-        args: event.function_args,
-        result: event.function_result,
-        createdAt,
-      }
+      const resolvedStepId = resolveStepIdForToolEvent(event, state.timeline)
+      const normalizedEvent =
+        resolvedStepId && !event.step_id?.trim()
+          ? { ...event, step_id: resolvedStepId }
+          : event
+      const tools = upsertTool(state.tools, normalizedEvent)
+      const timeline = attachToolToTimeline(
+        state.timeline,
+        normalizedEvent,
+        tools
+      )
 
       return {
         ...state,
         tools,
-        timeline: upsertTimelineItem(state.timeline, toolItem),
+        timeline,
       }
     }
 

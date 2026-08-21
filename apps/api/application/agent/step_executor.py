@@ -9,6 +9,7 @@ from application.prompts.react import EXECUTION_PROMPT
 from application.agent.react_executor import ReActExecutor
 from application.agent.step_result import StepExecutionResult, SummarizeResult
 from domain.event.base import StreamEvent
+from domain.event.tool import ToolStreamEvent
 from domain.task.identifiers import TaskId
 from domain.task.step import TaskStep
 
@@ -40,11 +41,12 @@ class StepExecutor:
         resume: bool = False,
     ) -> StepExecutionResult:
         """执行单个规划步骤并返回结构化结果。"""
+        bound_on_event = self._bind_step_events(step, on_event)
         if resume:
             return await self._react.continue_after_user_input(
                 task_id=task_id,
                 agent_role=step.agent_role,
-                on_event=on_event,
+                on_event=bound_on_event,
             )
 
         ctx = context or StepExecutionContext()
@@ -58,8 +60,26 @@ class StepExecutor:
             task_id=task_id,
             agent_role=step.agent_role,
             query=query,
-            on_event=on_event,
+            on_event=bound_on_event,
         )
+
+    @staticmethod
+    def _bind_step_events(
+        step: TaskStep,
+        on_event: OnEventCallback | None,
+    ) -> OnEventCallback | None:
+        """给 tool 事件补上所属步骤 id，供前端挂到步骤卡片下。"""
+        if on_event is None:
+            return None
+
+        step_id = str(step.step_id)
+
+        async def wrapped(event: StreamEvent) -> None:
+            if isinstance(event, ToolStreamEvent) and not event.step_id:
+                event.step_id = step_id
+            await on_event(event)
+
+        return wrapped
 
     async def summarize(
         self,

@@ -52,8 +52,10 @@ def test_message_and_tool_events() -> None:
         tool_name="browser",
         function_name="browser_view",
         function_args={"url": "https://example.com"},
+        step_id="step-abc",
     ).as_dict()
     assert calling["status"] == ToolEventStatus.CALLING.value
+    assert calling["step_id"] == "step-abc"
 
     called = tool_called(
         tool_call_id="c1",
